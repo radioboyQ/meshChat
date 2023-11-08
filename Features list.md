@@ -1,11 +1,12 @@
-1.0 feature list:
-# Interface to publish and subscribe to the message bus - Recieving storing and shipping
-# TUI Display - A display of the database information on a terminal interface application
-# Database logging
-Critcal path: TUI interface guides development
-# Settings menu (JSON Config file)
+# 1.0 feature list:
+1. Interface to publish and subscribe to the message bus - Receiving storing and shipping
+2. TUI Display - A display of the database information on a terminal interface application
+3. Database logging
+Critical path: TUI interface guides development
+4. Settings menu (JSON Config file)
 
-Here is a features list for meshChat
+
+Here is a features list for meshChat in no specific order
 
 channel list 
 node list 

@@ -22,5 +22,6 @@ def main():
     while True:
         print("...")
         time.sleep(3)
+        print("hello world")
 
 main()

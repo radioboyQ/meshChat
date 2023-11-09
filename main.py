@@ -27,7 +27,13 @@ def onReceive(packet, interface, ):
         pass
 
 
-def textMessageApp(packet):
+def whoToWho(packet):  # displays from and to information
+    # calls some kind of form and to information - ^All is a global call to all radios
+    print(f"whoToWho Function fromId was {str(packet.get('fromId'))} toId was {str(packet.get('toId'))}")
+    return
+
+
+def textMessageApp(packet): # displays messages sent over the mess
     print("Message" * 10)
     print(
         f"Message from {str(packet.get('from'))}, To {str(packet.get('to'))} {str(packet.get('decoded').get('text'))}"
@@ -37,12 +43,7 @@ def textMessageApp(packet):
     return
 
 
-def whoToWho(packet):  # calls some kind of form and to information - ^All is a global call to all radios
-    print(f"whoToWho Function fromId was {str(packet.get('fromId'))} toId was {str(packet.get('toId'))}")
-    return
-
-
-def adminApp(packet):
+def adminApp(packet): # manages the ADMINAPP packet
     frompacket = str(packet.get('fromId'))
     topacket = str(packet.get('toId'))
     if frompacket == topacket:
@@ -56,7 +57,7 @@ def adminApp(packet):
     return
 
 
-def telemetryApp(packet):
+def telemetryApp(packet): # manages the TELEMETRY_APP packet
     print("telemetryApp function:")
     print(f"TELEMETRY_APP telemetry notes were: {str(packet.get('decoded').get('telemetry'))}")
     return

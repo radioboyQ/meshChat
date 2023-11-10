@@ -1,6 +1,6 @@
 from textual.app import App, ComposeResult
 from textual.containers import Container, ScrollableContainer
-from textual.widgets import Footer, Header, Static, Markdown, Log
+from textual.widgets import Footer, Header, Static, Markdown, Log, Input
 
 EXAMPLE_CHAT = """\
 User1: Hello World!  
@@ -32,7 +32,7 @@ class meshChatDisplayApp(App):
                 yield Static("User\n"*10)
             with Container(id="channelbox"):
                 yield Static("Channel\n"*5)
-        yield Static("TextEntryBox", id="textentrybox")
+        yield Input(placeholder="TextEntryBox", id="textentrybox")
 
 
 

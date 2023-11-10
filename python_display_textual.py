@@ -29,9 +29,9 @@ class meshChatDisplayApp(App):
             with ScrollableContainer(id="chatlog"):
                 yield Static(f"{Example_Log_Text}"*3)
             with Container(id="nodebox"):
-                yield Static("User"*10)
+                yield Static("User\n"*10)
             with Container(id="channelbox"):
-                yield Static("Channel"*5)
+                yield Static("Channel\n"*5)
         yield Static("TextEntryBox", id="textentrybox")
 
 

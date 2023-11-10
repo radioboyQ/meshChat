@@ -27,7 +27,3 @@
     background: $panel;
     border: greenyellow;
 }
-.box {
-    height: 1fr;
-    border: solid green;
-}

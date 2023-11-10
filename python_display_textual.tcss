@@ -1,0 +1,33 @@
+#app-grid {
+    layout: grid;
+    grid-columns: 1fr;
+    grid-rows: 1fr;
+}
+#chatlog {
+    width: 100%;
+}
+#textentrybox {
+    dock: bottom;
+    width: 100%;
+    height: 3;
+    background: $panel;
+    border: dodgerblue;
+}
+#channelbox {
+    dock: left;
+    width: 15;
+    height: 100%;
+    background: $panel;
+    border: mediumvioletred;
+}
+#nodebox {
+    dock: right;
+    width: 15;
+    height: 100%;
+    background: $panel;
+    border: greenyellow;
+}
+.box {
+    height: 1fr;
+    border: solid green;
+}

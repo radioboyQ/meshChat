@@ -3,8 +3,12 @@
     grid-columns: 1fr;
     grid-rows: 1fr;
 }
+/* there's an alternative we could try which joins the channel, chatbox, and node list into a single container and*/
+/* manipulate that container overall */
+
 #chatlog {
     width: 100%;
+    min-width: 20;
 }
 #textentrybox {
     dock: bottom;
@@ -15,14 +19,14 @@
 }
 #channelbox {
     dock: left;
-    width: 15;
+    width: 10;
     height: 100%;
     background: $panel;
     border: mediumvioletred;
 }
 #nodebox {
     dock: right;
-    width: 15;
+    width: 6;
     height: 100%;
     background: $panel;
     border: greenyellow;

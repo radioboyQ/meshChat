@@ -24,6 +24,11 @@ Button {
     width: 100%;
 }
 
+RadioSettingsScreen {
+    layout: grid;
+    grid-size: 8 8;
+}
+
 MainChatScreen {
     layout: grid;
     grid-size: 8 ;

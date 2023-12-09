@@ -64,7 +64,7 @@ class Setup():
         # This format tells the ORM what to expect and what the columns should be named
         # This is not data input, it's just formatting
         self.local_radio = Table(
-           'local_radio', metadata,
+            'local_radio', metadata,
             Column('id', Integer, primary_key=True),
             Column("local_node_id", String),
             Column("firmware_version", String),
@@ -172,21 +172,3 @@ class Setup():
 
     def interface_close(self):
         self.interface.close()
-class Parser():
-    """
-    Parser functions when a new msg is received
-    """
-
-    def __init__(self, console: Console):
-        self.console = console
-
-    def recv_text(self, packet, interface):
-        self.console.print(f"{success_green} Incoming Message: {packet}")
-        self.console.print(f"{success_green} self.interface Information: {self.interface}")
-        self.console.print("-----------------")
-
-    def onConnection(self, interface):
-        self.console.print(f"{info_green_splat} Connected to radio: {self.interface}")
-
-    def connection_lost(self, interface):
-        self.console.print(f"{error_fmt} Connection to radio {self.interface} has been lost")

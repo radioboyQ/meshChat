@@ -4,12 +4,19 @@ from pprint import pprint
 
 # Installed 3rd party modules
 import click
+import meshtastic
+import meshtastic.serial_interface
 from pubsub import pub
+from rich import box, inspect
 from rich.console import Console
+from rich.syntax import Syntax
+from rich.table import Table
 from textual.app import App, ComposeResult, RenderResult
 from textual.containers import ScrollableContainer, Container, VerticalScroll, Vertical, Grid
+from textual import events
+from textual.css.query import NoMatches
 from textual.screen import Screen, ModalScreen
-from textual.widgets import Header, Footer, Log, Placeholder, Static, Label, Button
+from textual.widgets import Header, Footer, Log, Placeholder, Static, Label, Button, LoadingIndicator, TextArea, Markdown, RichLog
 
 # Import custom status symbols
 from meshChatLib import (info_blue_splat,
@@ -20,6 +27,25 @@ from meshChatLib import (info_blue_splat,
                        success_green,
                        warning_triangle_yellow)
 from meshChatLib.setup import Setup, Parser
+
+CODE = '''\
+def loop_first_last(values: Iterable[T]) -> Iterable[tuple[bool, bool, T]]:
+    """Iterate and generate a tuple with a flag for first and last value."""
+    iter_values = iter(values)
+    try:
+        previous_value = next(iter_values)
+    except StopIteration:
+        return
+    first = True
+    for value in iter_values:
+        yield first, False, previous_value
+        first = False
+        previous_value = value
+    yield first, True, previous_value\
+'''
+
+
+
 
 class QuitScreen(ModalScreen[bool]):
     """Screen with a dialog to quit."""
@@ -45,7 +71,8 @@ class MainChatScreen(Screen):
                        Placeholder(label="Channels", classes="box", id="channels"), id="left_col")
         yield Vertical(
                 VerticalScroll(
-                    Placeholder(label="Main Chat", classes="box", id="main_chat")),
+                    RichLog(highlight=True, markup=True)),
+                    # Placeholder(label="Main Chat", classes="box", id="main_chat")),
                 Placeholder(label="Text Input", classes="box", id="main_chat_text_input"), id="center_col")
         yield Vertical(
             Placeholder(label="Radio Information", classes="box", id="radio_info"), id="right_col"
@@ -54,14 +81,46 @@ class MainChatScreen(Screen):
         yield Footer()
 
 
+
 class RadioSettingsScreen(Screen):
+
     def compose(self) -> ComposeResult:
-        yield Placeholder("Radio Settings Screen")
+        radio_info_table = Table(title="Radio Configuration Table", box=box.ASCII_DOUBLE_HEAD)
+        # Add all of the columns for the table
+        radio_info_table.add_column("local_node_id")
+        radio_info_table.add_column("firmware_version")
+        radio_info_table.add_column("device_state_version")
+        radio_info_table.add_column("canShutdown")
+        radio_info_table.add_column("hasWifi")
+        radio_info_table.add_column("hasBluetooth")
+        radio_info_table.add_column("position_flags")
+        radio_info_table.add_column("hw_model")
+        radio_info_table.add_column("macaddr")
+        radio_info_table.add_column("long_name")
+        radio_info_table.add_column("short_name")
+        radio_info_table.add_column("first_seen")
+        radio_info_table.add_column("last_seen")
+
+        # local_node_id = local_node_id,
+        # long_name = long_name,
+        # short_name = short_name,
+        # firmware_version = self.interface.metadata.firmware_version,
+        # device_state_version = self.interface.metadata.device_state_version,
+        # macaddr = macaddr,
+        # canShutdown = self.interface.metadata.canShutdown,
+        # hasWifi = self.interface.metadata.hasWifi,
+        # hasBluetooth = self.interface.metadata.hasBluetooth,
+        # position_flags = self.interface.metadata.position_flags,
+        # hw_model = self.interface.metadata.hw_model,
+        # first_seen = datetime.datetime.now(),
+        # last_seen = datetime.datetime.now()
+
         yield Header(show_clock=True)
         yield Footer()
 
 
 class HelpScreen(Screen):
+
     def compose(self) -> ComposeResult:
         yield Placeholder("Help Screen")
         yield Header(show_clock=True, name="\"Help\"", id="header")
@@ -85,6 +144,15 @@ class meshChatApp(App):
         "help": HelpScreen,
     }
 
+
+    def __init__(self, radio_path: str):
+        super().__init__()
+        self.radio_path = radio_path
+        pub.subscribe(self.recv_text, "meshtastic.receive.text")
+        pub.subscribe(self.on_local_connection, "meshtastic.connection.established")
+        self.interface = meshtastic.serial_interface.SerialInterface(devPath=self.radio_path)
+
+
     def on_mount(self) -> None:
         self.switch_mode("meshchat")
 
@@ -98,24 +166,57 @@ class meshChatApp(App):
 
         self.push_screen(QuitScreen(), check_quit)
 
+    def on_local_connection(self, interface):
+        """
+        Called when a new radio connection is made
+        """
+        self.console.print(type(interface))
 
-    # def recv_text(self, packet, interface):
-    #     self.console.print(f"{success_green} Incoming Message: {packet}")
-    #     self.console.print(f"{success_green} self.interface Information: {self.interface}")
-    #     self.console.print("-----------------")
+    def recv_text(self, packet, interface):
+        try:
+            text_log = self.query_one(RichLog)
+            text_log.write(f"{success_green} Incoming Message: {packet}")
+            text_log.write(f"{success_green} self.interface Information: {self.interface}")
+        except NoMatches as e:
+            pass
+        # self.console.print(f"{success_green} Incoming Message: {packet}")
+        # self.console.print(f"{success_green} self.interface Information: {self.interface}")
+        # self.console.print("-----------------")
+
+    # def on_ready(self) -> None:
+    #     text_log = self.query_one(RichLog)
+    #     self.console.print(text_log)
+    #     text_log.write(Syntax(CODE, "python", indent_guides=True))
+
+    # def on_key(self, event: events.Key) -> None:
+    #     """Write Key events to log."""
+    #     # IF the RichLog exists, use it. else just skip it
+    #     try:
+    #         text_log = self.query_one(RichLog)
+    #         text_log.write(event)
+    #     except NoMatches as e:
+    #         pass
+
+
 @click.command("meshChat")
 @click.option("-r", "--radio", help="Local path to the radio", default="/dev/ttyACM0", show_default=True,
               type=click.Path(exists=True, readable=True, writable=True, resolve_path=True, allow_dash=True))
 @click.pass_context
 def main(ctx, radio):
-    console = Console()
+    # console = Console()
+
+    # Grab the radio from the path provided and error checked earlier
+    # global interface
+    # interface = meshtastic.serial_interface.SerialInterface(devPath=radio)
 
     # Define the app
-    app = meshChatApp()
+    # radio_path
+    app = meshChatApp(radio_path=radio)
     app.run()
 
     # Connect to the radio
-    # setup = Setup(console=console, radio_path=radio)
+    # setup = Setup(console=console,
+    # radio_path=radio)
     #
     # pub.subscribe(app.recv_text, "meshtastic.receive.text")
     # Run the app. Do not pass this line until the TUI quits

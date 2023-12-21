@@ -49,14 +49,22 @@ MainChatScreen {
     height: 50%;
 }
 
-#dms {
-    height: 1fr;
+/*ListItem {*/
+/*    height: auto;*/
+/*}*/
+
+#nodes {
+    width: 100%;
+    height: 50%;
 }
 
 #radio_info {
     height: 1fr;
 }
 
+#add_node {
+    height: 5%;
+}
 
 #center_col {
     column-span: 4;
@@ -77,6 +85,11 @@ MainChatScreen {
     column-span: 1;
     row-span: 2;
     background: blue;
+}
+
+.nodes {
+    height: 100%;
+    border: black;
 }
 
 .box {

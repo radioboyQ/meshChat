@@ -4,6 +4,7 @@ from pprint import pprint
 
 # Installed 3rd party modules
 import click
+import datetime
 import meshtastic
 import meshtastic.serial_interface
 from pubsub import pub
@@ -11,12 +12,16 @@ from rich import box, inspect
 from rich.console import Console
 from rich.syntax import Syntax
 from rich.table import Table
+from sqlalchemy import create_engine, Column, Integer, String, DateTime
+from sqlalchemy.orm import sessionmaker, declarative_base
 from textual.app import App, ComposeResult, RenderResult
 from textual.containers import ScrollableContainer, Container, VerticalScroll, Vertical, Grid
 from textual import events
 from textual.css.query import NoMatches
 from textual.screen import Screen, ModalScreen
-from textual.widgets import Header, Footer, Log, Placeholder, Static, Label, Button, LoadingIndicator, TextArea, Markdown, RichLog
+from textual.widget import Widget
+from textual.widgets import (Header, Footer, Log, Placeholder, Static, Label, Button, LoadingIndicator, TextArea,
+                             Markdown, RichLog, Input, ListView, ListItem, OptionList)
 
 # Import custom status symbols
 from meshChatLib import (info_blue_splat,
@@ -26,26 +31,11 @@ from meshChatLib import (info_blue_splat,
                        error_fmt,
                        success_green,
                        warning_triangle_yellow)
-from meshChatLib.setup import Setup, Parser
+from meshChatLib.setup import Setup
+from meshChatLib.parser import Parser
 
-CODE = '''\
-def loop_first_last(values: Iterable[T]) -> Iterable[tuple[bool, bool, T]]:
-    """Iterate and generate a tuple with a flag for first and last value."""
-    iter_values = iter(values)
-    try:
-        previous_value = next(iter_values)
-    except StopIteration:
-        return
-    first = True
-    for value in iter_values:
-        yield first, False, previous_value
-        first = False
-        previous_value = value
-    yield first, True, previous_value\
-'''
-
-
-
+Base = declarative_base()
+engine = create_engine('sqlite:////home/quincy/PycharmProjects/meshChat/meshLibTest.db')
 
 class QuitScreen(ModalScreen[bool]):
     """Screen with a dialog to quit."""
@@ -64,25 +54,101 @@ class QuitScreen(ModalScreen[bool]):
         else:
             self.dismiss(False)
 
+# class Node(Widget):
+#
+#     def compose(self) -> ComposeResult:
+#         pass
+
+
+
 class MainChatScreen(Screen):
 
+    BINDINGS = [("ctrl+d", "toggle_dark", "Dark Mode"),
+                ("ctrl+q", "request_quit", "Quit"),
+                ("ctrl+h", "switch_mode('help')", "Help"),
+                ("ctrl+s", "switch_mode('settings')", "Settings")]
+
+    def __init__(
+            self,
+            name: str | None = None,
+            id: str | None = None,
+            classes: str | None = None,):
+        super().__init__(name, id, classes)
+
+
     def compose(self) -> ComposeResult:
-        yield Vertical(Placeholder(label="DMs", classes="box", id="dms"),
-                       Placeholder(label="Channels", classes="box", id="channels"), id="left_col")
+        yield Vertical(
+                ListView(classes="nodes", id="nodes"),
+                        Placeholder(label="Channels", classes="box", id="channels"), id="left_col")
         yield Vertical(
                 VerticalScroll(
                     RichLog(highlight=True, markup=True)),
                     # Placeholder(label="Main Chat", classes="box", id="main_chat")),
-                Placeholder(label="Text Input", classes="box", id="main_chat_text_input"), id="center_col")
+                Input(placeholder="Send messages", classes="box", id="main_chat_text_input", type="text"), id="center_col")
         yield Vertical(
-            Placeholder(label="Radio Information", classes="box", id="radio_info"), id="right_col"
+            Placeholder(label="Radio Information", classes="box", id="radio_info"),
+            Button("Add Nodes", classes="box", id="add_node"), id="right_col"
         )
         yield Header(show_clock=True)
         yield Footer()
 
+    def on_mount(self) -> None:
+        try:
+            input_box = self.query_one(Input)
+            input_box.focus()
+        except:
+            pass
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id == "main_chat_text_input":
+            msg_string = event.value.strip()
+            text_log = self.query_one(RichLog)
+            text_log.write(msg_string)
+            input_box = self.query_one(Input)
+            input_box.clear()
+
+
+    COLONIES: tuple[tuple[str, str, str, str], ...] = (
+        ("Aerilon", "Demeter", "1.2 Billion", "Gaoth"),
+        ("Aquaria", "Hermes", "75,000", "None"),
+        ("Canceron", "Hephaestus", "6.7 Billion", "Hades"),
+        ("Caprica", "Apollo", "4.9 Billion", "Caprica City"),
+        ("Gemenon", "Hera", "2.8 Billion", "Oranu"),
+        ("Leonis", "Artemis", "2.6 Billion", "Luminere"),
+        ("Libran", "Athena", "2.1 Billion", "None"),
+        ("Picon", "Poseidon", "1.4 Billion", "Queenstown"),
+        ("Sagittaron", "Zeus", "1.7 Billion", "Tawa"),
+        ("Scorpia", "Dionysus", "450 Million", "Celeste"),
+        ("Tauron", "Ares", "2.5 Billion", "Hypatia"),
+        ("Virgon", "Hestia", "4.3 Billion", "Boskirk"),
+    )
+
+    @staticmethod
+    def colony(name: str, god: str, population: str, capital: str) -> Table:
+        table = Table(title=f"Data for {name}", expand=True)
+        table.add_column("Patron God")
+        table.add_column("Population")
+        table.add_column("Capital City")
+        table.add_row(god, population, capital)
+        return table
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "add_node":
+            node_listview = self.query_one("#nodes", ListView)
+            #
+            node_listview.mount(OptionList(*[self.colony(*row) for row in self.COLONIES]))
+            # self.notify("Button Pushed", title="Guess what!")
+            text_log = self.query_one(RichLog)
+            text_log.write("Btn")
+
 
 
 class RadioSettingsScreen(Screen):
+
+    BINDINGS = [("ctrl+d", "toggle_dark", "Dark Mode"),
+                ("ctrl+q", "request_quit", "Quit"),
+                ("ctrl+t", "switch_mode('meshchat')", "meshChat"),
+                ("ctrl+h", "switch_mode('help')", "Help")]
 
     def compose(self) -> ComposeResult:
         radio_info_table = Table(title="Radio Configuration Table", box=box.ASCII_DOUBLE_HEAD)
@@ -121,6 +187,11 @@ class RadioSettingsScreen(Screen):
 
 class HelpScreen(Screen):
 
+    BINDINGS = [("ctrl+d", "toggle_dark", "Dark Mode"),
+                ("ctrl+q", "request_quit", "Quit"),
+                ("ctrl+t", "switch_mode('meshchat')", "meshChat"),
+                ("ctrl+s", "switch_mode('settings')", "Settings")]
+
     def compose(self) -> ComposeResult:
         yield Placeholder("Help Screen")
         yield Header(show_clock=True, name="\"Help\"", id="header")
@@ -135,7 +206,6 @@ class meshChatApp(App):
     # A binding for q and for Q to quit the app
     BINDINGS = [("ctrl+d", "toggle_dark", "Dark Mode"),
                 ("ctrl+q", "request_quit", "Quit"),
-                ("ctrl+t", "switch_mode('meshchat')", "meshChat"),
                 ("ctrl+s", "switch_mode('settings')", "Settings"),
                 ("ctrl+h", "switch_mode('help')", "Help")]
     MODES = {
@@ -147,11 +217,31 @@ class meshChatApp(App):
 
     def __init__(self, radio_path: str):
         super().__init__()
+        # Set up SQL session before setting up the Meshtastic callbacks
+        # Global SQLAlchemy import
+        Base.metadata.create_all(engine)
+
+        Session = sessionmaker(bind=engine)
+        session = Session()
+        self.session = session
+
+        # Make radio_path avaiable
         self.radio_path = radio_path
+
+
+    def on_ready(self):
+        # Set up call backs
         pub.subscribe(self.recv_text, "meshtastic.receive.text")
         pub.subscribe(self.on_local_connection, "meshtastic.connection.established")
+        pub.subscribe(self.update_nodes, "meshtastic.node.updated")
         self.interface = meshtastic.serial_interface.SerialInterface(devPath=self.radio_path)
+        # Local radio information
+        self.getMyUser = self.interface.getMyUser()
+        text_log = self.query_one(RichLog)
 
+        # Grabbing the local radio's information
+        text_log.write(self.session)
+        text_log.write(f"Local radio: {self.getMyUser}")
 
     def on_mount(self) -> None:
         self.switch_mode("meshchat")
@@ -170,32 +260,56 @@ class meshChatApp(App):
         """
         Called when a new radio connection is made
         """
-        self.console.print(type(interface))
+        try:
+            text_log = self.query_one(RichLog)
+        except NoMatches as e:
+            pass
+        # text_log.write(inspect(interface))
 
     def recv_text(self, packet, interface):
         try:
             text_log = self.query_one(RichLog)
-            text_log.write(f"{success_green} Incoming Message: {packet}")
-            text_log.write(f"{success_green} self.interface Information: {self.interface}")
+            # text_log.write(f"{success_green} Incoming Message: {packet}")
+            # text_log.write(f"{success_green} self.interface Information: {self.interface}")
+            text_log.write(packet.get("decoded").get('text'))
         except NoMatches as e:
             pass
-        # self.console.print(f"{success_green} Incoming Message: {packet}")
-        # self.console.print(f"{success_green} self.interface Information: {self.interface}")
-        # self.console.print("-----------------")
 
-    # def on_ready(self) -> None:
-    #     text_log = self.query_one(RichLog)
-    #     self.console.print(text_log)
-    #     text_log.write(Syntax(CODE, "python", indent_guides=True))
+    def update_nodes(self, node, interface):
+        try:
+            new_node = Node(longName=node.get("user").get("longName"),
+                            shortName=node.get("user").get("shortName"),
+                            macaddr=node.get("user").get("macaddr"),
+                            hwModel=node.get("user").get("hwModel"))
+            self.session.add(new_node)
+            self.session.commit()
+            all_users = self.session.query(Node).all()
+            # node_list = self.query_one("#nodes")
+            # node_listview = self.query_one("#nodes", ListView)
+            # node_listview.mount(OptionList(*[self.colony(*row) for row in self.COLONIES]))
+            text_log = self.query_one(RichLog)
+            text_log.write("Update Nodes List")
+            text_log.write(node)
+            # text_log.write(all_users)
+            text_log.write(self.interface)
+        except NoMatches as e:
+            # pass
+            text_log = self.query_one(RichLog)
+            text_log.write("Exception")
+            text_log.write(e)
 
-    # def on_key(self, event: events.Key) -> None:
-    #     """Write Key events to log."""
-    #     # IF the RichLog exists, use it. else just skip it
-    #     try:
-    #         text_log = self.query_one(RichLog)
-    #         text_log.write(event)
-    #     except NoMatches as e:
-    #         pass
+
+
+class Node(Base):
+    __tablename__ = 'nodes'
+
+    id = Column(Integer, primary_key=True)
+    longName = Column(String(50), unique=False, nullable=False)
+    shortName = Column(String(10), unique=False, nullable=False)
+    macaddr = Column(String(20), unique=True, nullable=False)
+    hwModel = Column(String(100), unique=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
 
 
 @click.command("meshChat")
@@ -209,8 +323,10 @@ def main(ctx, radio):
     # global interface
     # interface = meshtastic.serial_interface.SerialInterface(devPath=radio)
 
+
+
+
     # Define the app
-    # radio_path
     app = meshChatApp(radio_path=radio)
     app.run()
 

@@ -319,45 +319,9 @@ class Node(Base):
 def main(ctx, radio):
     # console = Console()
 
-    # Grab the radio from the path provided and error checked earlier
-    # global interface
-    # interface = meshtastic.serial_interface.SerialInterface(devPath=radio)
-
-
-
-
     # Define the app
     app = meshChatApp(radio_path=radio)
     app.run()
-
-    # Connect to the radio
-    # setup = Setup(console=console,
-    # radio_path=radio)
-    #
-    # pub.subscribe(app.recv_text, "meshtastic.receive.text")
-    # Run the app. Do not pass this line until the TUI quits
-
-    # Connect to the radio
-    # setup = Setup(console=console, radio_path=radio)
-    # Instantiate Parser class
-    # parser = Parser(console=console)
-    #
-    # # Example code for publisher subscribe methods.
-    # pub.subscribe(parser.recv_text, "meshtastic.receive.text")
-    # pub.subscribe(parser.connection_lost, "meshtastic.connection.lost")
-    # pub.subscribe(parser.onConnection, "meshtastic.connection.established")
-
-
-    # console.print(f"{info_green_splat} Hopefully listening to {radio}")
-    # with console.status("Waiting for incoming messages", spinner="dots") as spin:
-    #     # Keep the spinner going while messages show up and are printed to screen
-    #     while True:
-    #         pass
-
-
-
-
-
 
 if __name__ == "__main__":
     main()

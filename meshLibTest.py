@@ -1,6 +1,7 @@
 # Standard library imports
-from time import strftime, localtime
 from pprint import pprint
+import sys
+from time import strftime, localtime
 
 # Installed 3rd party modules
 import click
@@ -134,9 +135,9 @@ class MainChatScreen(Screen):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "add_node":
-            node_listview = self.query_one("#nodes", ListView)
-            #
-            node_listview.mount(OptionList(*[self.colony(*row) for row in self.COLONIES]))
+            # node_listview = self.query_one("#nodes", ListView)
+            # #
+            # node_listview.mount(OptionList(*[self.colony(*row) for row in self.COLONIES]))
             # self.notify("Button Pushed", title="Guess what!")
             text_log = self.query_one(RichLog)
             text_log.write("Btn")
@@ -144,7 +145,6 @@ class MainChatScreen(Screen):
 
 
 class RadioSettingsScreen(Screen):
-
     BINDINGS = [("ctrl+d", "toggle_dark", "Dark Mode"),
                 ("ctrl+q", "request_quit", "Quit"),
                 ("ctrl+t", "switch_mode('meshchat')", "meshChat"),
@@ -234,6 +234,7 @@ class meshChatApp(App):
         pub.subscribe(self.recv_text, "meshtastic.receive.text")
         pub.subscribe(self.on_local_connection, "meshtastic.connection.established")
         pub.subscribe(self.update_nodes, "meshtastic.node.updated")
+        pub.subscribe(self.disconnect_radio, "meshtastic.connection.lost")
         self.interface = meshtastic.serial_interface.SerialInterface(devPath=self.radio_path)
         # Local radio information
         self.getMyUser = self.interface.getMyUser()
@@ -271,32 +272,86 @@ class meshChatApp(App):
             text_log = self.query_one(RichLog)
             # text_log.write(f"{success_green} Incoming Message: {packet}")
             # text_log.write(f"{success_green} self.interface Information: {self.interface}")
-            text_log.write(packet.get("decoded").get('text'))
+            decoded_text = packet.get("decoded").get('text')
+            # Date time msg received
+            now = datetime.datetime.now()
+            now_fmt = now.strftime('%Y-%m-%d %H:%M:%S')
+            # Ljust is to make the formatting look better
+            msg_string = f"{now_fmt.ljust(20, ' ')} [white bold]|[/] {decoded_text}"
+            text_log.write(msg_string)
         except NoMatches as e:
             pass
 
+    def disconnect_radio(self, interface):
+        """
+        Called when a radio disconnect event is received.
+        Quit and print to console
+        """
+        text_log = self.query_one(RichLog)
+        text_log.write("Radio Disconnect")
+
+        print(f"{error_fmt} Radio Disconnected.")
+        print(f"{info_blue_splat} Exiting.")
+        self.exit()
+
     def update_nodes(self, node, interface):
         try:
-            new_node = Node(longName=node.get("user").get("longName"),
-                            shortName=node.get("user").get("shortName"),
-                            macaddr=node.get("user").get("macaddr"),
-                            hwModel=node.get("user").get("hwModel"))
-            self.session.add(new_node)
-            self.session.commit()
-            all_users = self.session.query(Node).all()
-            # node_list = self.query_one("#nodes")
-            # node_listview = self.query_one("#nodes", ListView)
-            # node_listview.mount(OptionList(*[self.colony(*row) for row in self.COLONIES]))
             text_log = self.query_one(RichLog)
-            text_log.write("Update Nodes List")
-            text_log.write(node)
-            # text_log.write(all_users)
-            text_log.write(self.interface)
+            # Check if the node has been seen before
+            query_records = self.session.query(Node).filter_by(macaddr=node.get("user").get("macaddr"))
+
+            if query_records.count() == 1:
+                # There's only one
+                for i in query_records:
+                    text_log.write((f"There's only one"))
+
+                    text_log.write(i.longName)
+                    node_listview = self.query_one("#nodes", ListView)
+                    # Create the table for the side bar
+                    """
+                    Long Name
+                    Short Name
+                    Last Seen"""
+
+
+                    # node_listview.mount(OptionList())
+
+            elif query_records.count() == 0:
+                # If node not seen before, add to DB
+                # Update sidebar
+                new_node = Node(longName=node.get("user").get("longName"),
+                                shortName=node.get("user").get("shortName"),
+                                macaddr=node.get("user").get("macaddr"),
+                                hwModel=node.get("user").get("hwModel"))
+                self.session.add(new_node)
+                self.session.commit()
+                all_users = self.session.query(Node).all()
+                # node_list = self.query_one("#nodes")
+                # node_listview = self.query_one("#nodes", ListView)
+                # node_listview.mount(OptionList(*[self.colony(*row) for row in self.COLONIES]))
+                text_log.write("Update Nodes List")
+                text_log.write(node)
+                # text_log.write(all_users)
+                text_log.write("Interface")
+                text_log.write(self.interface)
+            else:
+                # There's more than one?
+                for record in query_records:
+                    text_log.write(f"There's more than one node with that MAC")
+                    text_log.write(record)
+
         except NoMatches as e:
             # pass
             text_log = self.query_one(RichLog)
             text_log.write("Exception")
             text_log.write(e)
+
+
+
+            # query = Node.select(macaddr=node.get("user").get("macaddr"))
+            # text_log.write(query)
+
+            # text_log.write(self.session.scalars(select(Node).order_by(Node.macaddr)).all())
 
 
 

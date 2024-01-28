@@ -172,6 +172,16 @@ class meshChatApp(App):
         "help": HelpScreen,
     }
 
+    @property
+    def status_time_prefix(self):
+        # Date time msg received
+        now = datetime.datetime.now()
+        now_fmt = now.strftime('%Y-%m-%d %H:%M:%S')
+        # Ljust is to make the formatting look better
+        msg_string = f"{now_fmt.ljust(20, ' ')} [white bold]|[/]"
+        return msg_string
+
+
     def __init__(self, radio_path: str, database_path: str) -> None:
         super().__init__()
         # Set up SQL session before setting up the Meshtastic callbacks
@@ -265,10 +275,9 @@ class meshChatApp(App):
         Quit and print to console
         """
         text_log = self.query_one(RichLog)
-        text_log.write("Radio Disconnect")
+        text_log.write(f"{self.status_time_prefix} Radio Disconnect")
 
-        print(f"{error_fmt} Radio Disconnected.")
-        print(f"{info_blue_splat} Exiting.")
+
         self.exit()
 
     def update_nodes(self, node, interface):
@@ -281,6 +290,9 @@ class meshChatApp(App):
             for node in all_nodes:
                 text_log.write(f"{node.macaddr} node")
             text_log.write("-------")
+
+
+
 
             if query_records.count() == 1:
                 # There's only one

@@ -13,7 +13,7 @@ from rich import box, inspect
 from rich.console import Console
 from rich.syntax import Syntax
 from rich.table import Table
-from sqlalchemy import create_engine, Column, Integer, String, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, func, Boolean, update, insert
 from sqlalchemy.orm import sessionmaker, declarative_base
 from textual.app import App, ComposeResult, RenderResult
 from textual.containers import ScrollableContainer, Container, VerticalScroll, Vertical, Grid
@@ -216,7 +216,9 @@ class meshChatApp(App):
             text_log.write("Btn")
 
     def on_ready(self):
-        # Set up call backs
+        # Grab the chat log so we can write debug logs
+        text_log = self.query_one(RichLog)
+        # Start settting up Meshtastic because Textual is ready
         pub.subscribe(self.recv_text, "meshtastic.receive.text")
         pub.subscribe(self.on_local_connection, "meshtastic.connection.established")
         pub.subscribe(self.update_nodes, "meshtastic.node.updated")
@@ -224,11 +226,31 @@ class meshChatApp(App):
         self.interface = meshtastic.serial_interface.SerialInterface(devPath=self.radio_path)
         # Local radio information
         self.getMyUser = self.interface.getMyUser()
-        text_log = self.query_one(RichLog)
+        self.radio_id = self.getMyUser.get("id")
+        self.longName = self.getMyUser.get("longName")
+        self.shortName = self.getMyUser.get("shortName")
+        self.hwModel = self.getMyUser.get("hwModel")
+        self.macaddr = self.getMyUser.get("macaddr")
 
-        # Grabbing the local radio's information
-        # text_log.write(self.session)
-        # text_log.write(f"Local radio: {self.getMyUser}")
+        # Set the local radio
+        query = self.session.query(Node).filter_by(macaddr=self.macaddr)
+        query_resp = self.session.execute(query)
+        resp_node_count = 0
+        for resp_node in query_resp:
+            resp_node_count += 1
+        if resp_node_count == 0:
+            text_log.write("New node")
+            # Node doesn't exist in the database, add it
+            local_node = Node(longName=self.longName, shortName=self.shortName, macaddr=self.macaddr, hwModel=self.hwModel, local_radio=True)
+            self.session.add(local_node)
+            self.session.commit()
+        else:
+            text_log.write(f"{self.status_time_prefix} The local node has been seen before")
+            local_mac_resp = self.session.query(Node).filter(Node.macaddr == self.macaddr)
+            local_node = {"longName": self.longName, "shortName": self.shortName, "macaddr": self.macaddr, "hwModel": self.hwModel, "local_radio": True}
+            text_log.write(local_node)
+            self.session.execute(update(Node).where(Node.macaddr == self.macaddr).values({Node.local_radio: True}))
+            self.session.commit()
 
     def on_mount(self) -> None:
         self.switch_mode("meshchat")
@@ -239,6 +261,9 @@ class meshChatApp(App):
         def check_quit(quit: bool) -> None:
             """Called when QuitScreen is dismissed."""
             if quit:
+                # Disable the local node on exit
+                self.session.execute(update(Node).where(Node.macaddr == self.macaddr).values({Node.local_radio: False}))
+                self.session.commit()
                 self.exit()
 
         self.push_screen(QuitScreen(), check_quit)
@@ -287,6 +312,7 @@ class meshChatApp(App):
             query_records = self.session.query(Node).filter_by(macaddr=node.get("user").get("macaddr"))
 
             all_nodes = self.session.query(Node).all()
+            text_log.write(str(all_nodes.count()))
             for node in all_nodes:
                 text_log.write(f"{node.macaddr} node")
             text_log.write("-------")
@@ -330,38 +356,6 @@ class meshChatApp(App):
                     # text_log.write(all_nodes)
                     text_log.write("Interface")
                     text_log.write(interface)
-
-            elif query_records.count() == 0:
-                # If node not seen before, add to DB
-
-                new_node = Node(longName=node.get("user").get("longName"),
-                                shortName=node.get("user").get("shortName"),
-                                macaddr=node.get("user").get("macaddr"),
-                                hwModel=node.get("user").get("hwModel"))
-                self.session.add(new_node)
-                self.session.commit()
-                all_nodes = self.session.query(Node).all()
-                # node_listview.mount(OptionList(*[self.colony(*row) for row in self.COLONIES]))
-
-                node_listview = self.query_one("#nodes", ListView)
-                text_log.write(type(node_listview))
-                # Update sidebar
-                for node in all_nodes:
-                    node_listview = self.query_one("#nodes", ListView)
-                # node_listview.mount(OptionList(*[self.colony(*row) for row in self.COLONIES]))
-                text_log.write("Update Nodes List")
-                text_log.write(node)
-                # text_log.write(all_nodes)
-                text_log.write("Interface")
-                text_log.write(interface)
-
-
-            else:
-                # There's more than one?
-                for record in query_records:
-                    text_log.write(f"There's more than one node with that MAC")
-                    text_log.write(record)
-
         except NoMatches as e:
             # pass
             text_log = self.query_one(RichLog)
@@ -385,7 +379,12 @@ class Node(Base):
     shortName = Column(String(10), unique=False, nullable=False)
     macaddr = Column(String(20), unique=True, nullable=False)
     hwModel = Column(String(100), unique=False, nullable=False)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=func.now())
+    last_seen = Column(DateTime, default=func.now(), onupdate=func.now())
+    # Local radio sent per instance
+    local_radio = Column(Boolean, default=False)
+
+
 
 
 

@@ -100,48 +100,6 @@ class MainChatScreen(Screen):
         except:
             pass
 
-    def on_input_submitted(self, event: Input.Submitted) -> None:
-        if event.input.id == "main_chat_text_input":
-            msg_string = event.value.strip()
-            text_log = self.query_one(RichLog)
-            text_log.write(msg_string)
-            input_box = self.query_one(Input)
-            input_box.clear()
-
-
-    COLONIES: tuple[tuple[str, str, str, str], ...] = (
-        ("Aerilon", "Demeter", "1.2 Billion", "Gaoth"),
-        ("Aquaria", "Hermes", "75,000", "None"),
-        ("Canceron", "Hephaestus", "6.7 Billion", "Hades"),
-        ("Caprica", "Apollo", "4.9 Billion", "Caprica City"),
-        ("Gemenon", "Hera", "2.8 Billion", "Oranu"),
-        ("Leonis", "Artemis", "2.6 Billion", "Luminere"),
-        ("Libran", "Athena", "2.1 Billion", "None"),
-        ("Picon", "Poseidon", "1.4 Billion", "Queenstown"),
-        ("Sagittaron", "Zeus", "1.7 Billion", "Tawa"),
-        ("Scorpia", "Dionysus", "450 Million", "Celeste"),
-        ("Tauron", "Ares", "2.5 Billion", "Hypatia"),
-        ("Virgon", "Hestia", "4.3 Billion", "Boskirk"),
-    )
-
-    @staticmethod
-    def colony(name: str, god: str, population: str, capital: str) -> Table:
-        table = Table(title=f"Data for {name}", expand=True)
-        table.add_column("Patron God")
-        table.add_column("Population")
-        table.add_column("Capital City")
-        table.add_row(god, population, capital)
-        return table
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "add_node":
-            # node_listview = self.query_one("#nodes", ListView)
-            # #
-            # node_listview.mount(OptionList(*[self.colony(*row) for row in self.COLONIES]))
-            # self.notify("Button Pushed", title="Guess what!")
-            text_log = self.query_one(RichLog)
-            text_log.write("Btn")
-
 
 
 class RadioSettingsScreen(Screen):
@@ -214,7 +172,6 @@ class meshChatApp(App):
         "help": HelpScreen,
     }
 
-
     def __init__(self, radio_path: str):
         super().__init__()
         # Set up SQL session before setting up the Meshtastic callbacks
@@ -228,6 +185,25 @@ class meshChatApp(App):
         # Make radio_path avaiable
         self.radio_path = radio_path
 
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        # Input box for main chat window
+        if event.input.id == "main_chat_text_input":
+            msg_string = event.value.strip()
+            text_log = self.query_one(RichLog)
+            text_log.write(msg_string)
+            input_box = self.query_one(Input)
+            input_box.clear()
+            # Add the message to the SQL DB
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        # Temporary add button on the main screen
+        if event.button.id == "add_node":
+            # node_listview = self.query_one("#nodes", ListView)
+            # #
+            # node_listview.mount(OptionList(*[self.colony(*row) for row in self.COLONIES]))
+            # self.notify("Button Pushed", title="Guess what!")
+            text_log = self.query_one(RichLog)
+            text_log.write("Btn")
 
     def on_ready(self):
         # Set up call backs
@@ -241,8 +217,8 @@ class meshChatApp(App):
         text_log = self.query_one(RichLog)
 
         # Grabbing the local radio's information
-        text_log.write(self.session)
-        text_log.write(f"Local radio: {self.getMyUser}")
+        # text_log.write(self.session)
+        # text_log.write(f"Local radio: {self.getMyUser}")
 
     def on_mount(self) -> None:
         self.switch_mode("meshchat")
@@ -256,6 +232,7 @@ class meshChatApp(App):
                 self.exit()
 
         self.push_screen(QuitScreen(), check_quit)
+
 
     def on_local_connection(self, interface):
         """
@@ -300,6 +277,11 @@ class meshChatApp(App):
             # Check if the node has been seen before
             query_records = self.session.query(Node).filter_by(macaddr=node.get("user").get("macaddr"))
 
+            all_nodes = self.session.query(Node).all()
+            for node in all_nodes:
+                text_log.write(f"{node.macaddr} node")
+            text_log.write("-------")
+
             if query_records.count() == 1:
                 # There's only one
                 for i in query_records:
@@ -307,33 +289,61 @@ class meshChatApp(App):
 
                     text_log.write(i.longName)
                     node_listview = self.query_one("#nodes", ListView)
-                    # Create the table for the side bar
+                    # Create the table for the sidebar
                     """
                     Long Name
                     Short Name
                     Last Seen"""
 
 
+
                     # node_listview.mount(OptionList())
+
+                    # Update sidebar
+                    new_node = Node(longName=node.get("user").get("longName"),
+                                    shortName=node.get("user").get("shortName"),
+                                    macaddr=node.get("user").get("macaddr"),
+                                    hwModel=node.get("user").get("hwModel"))
+                    self.session.add(new_node)
+                    self.session.commit()
+                    all_nodes = self.session.query(Node).all()
+                    node_list = self.query_one("#nodes")
+                    text_log.write(type(node_list))
+                    # Update sidebar
+                    for node in all_nodes:
+                        node_listview = self.query_one("#nodes", ListView)
+                    # node_listview.mount(OptionList(*[self.colony(*row) for row in self.COLONIES]))
+                    text_log.write("Update Nodes List")
+                    text_log.write(node)
+                    # text_log.write(all_nodes)
+                    text_log.write("Interface")
+                    text_log.write(interface)
 
             elif query_records.count() == 0:
                 # If node not seen before, add to DB
-                # Update sidebar
+
                 new_node = Node(longName=node.get("user").get("longName"),
                                 shortName=node.get("user").get("shortName"),
                                 macaddr=node.get("user").get("macaddr"),
                                 hwModel=node.get("user").get("hwModel"))
                 self.session.add(new_node)
                 self.session.commit()
-                all_users = self.session.query(Node).all()
-                # node_list = self.query_one("#nodes")
-                # node_listview = self.query_one("#nodes", ListView)
+                all_nodes = self.session.query(Node).all()
+                # node_listview.mount(OptionList(*[self.colony(*row) for row in self.COLONIES]))
+
+                node_listview = self.query_one("#nodes", ListView)
+                text_log.write(type(node_listview))
+                # Update sidebar
+                for node in all_nodes:
+                    node_listview = self.query_one("#nodes", ListView)
                 # node_listview.mount(OptionList(*[self.colony(*row) for row in self.COLONIES]))
                 text_log.write("Update Nodes List")
                 text_log.write(node)
-                # text_log.write(all_users)
+                # text_log.write(all_nodes)
                 text_log.write("Interface")
-                text_log.write(self.interface)
+                text_log.write(interface)
+
+
             else:
                 # There's more than one?
                 for record in query_records:

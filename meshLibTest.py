@@ -172,7 +172,7 @@ class meshChatApp(App):
         "help": HelpScreen,
     }
 
-    def __init__(self, radio_path: str):
+    def __init__(self, radio_path: str, database_path: str) -> None:
         super().__init__()
         # Set up SQL session before setting up the Meshtastic callbacks
         # Global SQLAlchemy import
@@ -380,12 +380,15 @@ class Node(Base):
 @click.command("meshChat")
 @click.option("-r", "--radio", help="Local path to the radio", default="/dev/ttyACM0", show_default=True,
               type=click.Path(exists=True, readable=True, writable=True, resolve_path=True, allow_dash=True))
+@click.option("--database", "-d", help="Path to the database file", default="./meshLibTest.db",
+              type=click.Path(exists=False, file_okay=True, dir_okay=False, readable=True, writable=True, resolve_path=True),
+              show_default=True)
 @click.pass_context
-def main(ctx, radio):
+def main(ctx, radio, database):
     # console = Console()
 
     # Define the app
-    app = meshChatApp(radio_path=radio)
+    app = meshChatApp(radio_path=radio,database_path=database)
     app.run()
 
 if __name__ == "__main__":

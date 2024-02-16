@@ -118,6 +118,7 @@ class meshChatApp(App):
 
     def on_ready(self):
 
+        # Start Meshtatic interface when the UI is ready
         self.interface = meshtastic.serial_interface.SerialInterface(devPath=str(self.radio_path))
 
     def on_local_connection(self, interface):
@@ -241,6 +242,8 @@ class Node(Base):
     last_seen = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
     # Local radio sent per instance
     local_radio = Column(Boolean, default=False)
+
+
 
 
 def radio_check(radio_path: Path, console: Console):

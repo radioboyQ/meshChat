@@ -14,12 +14,14 @@ from rich.console import Console
 from rich.syntax import Syntax
 from rich.table import Table
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, func, Boolean, update, insert, select
+from sqlalchemy.dialects.sqlite import insert as sqlite_upsert # https://docs.sqlalchemy.org/en/20/orm/queryguide/dml.html#orm-upsert-statements
 from sqlalchemy.orm import sessionmaker, declarative_base
 from textual.app import App, ComposeResult, RenderResult
 from textual.containers import ScrollableContainer, Container, VerticalScroll, Vertical, Grid, Center, Middle
 from textual import events
 from textual.css.query import NoMatches
 from textual.screen import Screen, ModalScreen
+from textual.timer import Timer
 from textual.widget import Widget
 from textual.widgets import (Header, Footer, Log, Placeholder, Static, Label, Button, LoadingIndicator, TextArea,
                              Markdown, RichLog, Input, ListView, ListItem, OptionList, ProgressBar)
@@ -37,6 +39,7 @@ from meshChatLib.parser import Parser
 
 Base = declarative_base()
 engine = create_engine('sqlite:////home/quincy/PycharmProjects/meshChat/meshLibTest.db')
+Base.metadata.create_all(engine)
 
 class QuitScreen(ModalScreen[bool]):
     """Screen with a dialog to quit."""
@@ -55,32 +58,16 @@ class QuitScreen(ModalScreen[bool]):
         else:
             self.dismiss(False)
 
-# class RadioDisconnectScreen(ModalScreen[bool]):
-#     """Screen with a progress bar for disconnect timeout."""
-#
-#     def compose(self) -> ComposeResult:
-#         yield Grid(
-#             Label("Waiting for node to return", id="disconnect_timeout"),
-#             Button("Quit", variant="error", id="quit"),
-#             id="dialog",
-#         )
-#
-#     def on_button_pressed(self, event: Button.Pressed) -> None:
-#         if event.button.id == "quit":
-#             self.dismiss(True)
-#         else:
-#             self.dismiss(False)
-
-class RadioDisconnectScreen(ModalScreen[dict]):
+class RadioDisconnectScreen(ModalScreen[bool]):
     """Screen with a progress bar for disconnect timeout."""
 
 
-    progress_timer: Timer
+    # progress_timer: Timer
     """Timer to simulate progress happening."""
 
     def compose(self) -> ComposeResult:
         yield Grid(
-            Label("Are you sure you want to quit?", id="question"),
+            Label("Are you sure you want to wait?", id="question"),
             Button("Quit", variant="error", id="quit"),
             Button("Cancel", variant="primary", id="cancel"),
             id="dialog",
@@ -92,16 +79,24 @@ class RadioDisconnectScreen(ModalScreen[dict]):
         else:
             self.dismiss(False)
 
-    def compose(self) -> ComposeResult:
-        with Center():
-            with Middle():
-                yield Placeholder()
-        yield Footer()
+    # def compose(self) -> ComposeResult:
+    #     with Center():
+    #         with Middle():
+    #             yield Placeholder()
+    #     yield Footer()
 
     def on_mount(self) -> None:
         """Set up a timer to simulate progess happening."""
         self.progress_timer = self.set_interval(1 / 10, self.make_progress, pause=True)
 
+    def make_progress(self) -> None:
+        """Called automatically to advance the progress bar."""
+        self.query_one(ProgressBar).advance(1)
+
+    def action_start(self) -> None:
+        """Start the progress tracking."""
+        self.query_one(ProgressBar).update(total=100)
+        self.progress_timer.resume()
 
 
 class MainChatScreen(Screen):
@@ -211,6 +206,7 @@ class meshChatApp(App):
     MODES = {
         "meshchat": MainChatScreen,
         "settings": RadioSettingsScreen,
+        "radio_disconnect": RadioDisconnectScreen,
         "help": HelpScreen,
     }
 
@@ -271,40 +267,22 @@ class meshChatApp(App):
         pub.subscribe(self.update_nodes, "meshtastic.node.updated")
         pub.subscribe(self.disconnect_radio, "meshtastic.connection.lost")
         self.interface = meshtastic.serial_interface.SerialInterface(devPath=self.radio_path)
+
+        # Erase nodedb & SQLDB if required
+        if self.reset_node_db:
+            self.interface.getNode(None, False).resetNodeD1b()
+            self.session.flush(Node)
         # Local radio information
         self.getMyUser = self.interface.getMyUser()
+        # text_log = self.query_one(RichLog)
+        # text_log.write(self.getMyUser)
         self.radio_id = self.getMyUser.get("id")
         self.longName = self.getMyUser.get("longName")
         self.shortName = self.getMyUser.get("shortName")
         self.hwModel = self.getMyUser.get("hwModel")
         self.macaddr = self.getMyUser.get("macaddr")
 
-        # Set the local radio
-        # Check if the node has been seen before
-        # query_records = self.session.execute(
-        #     select(Node).
-        #     filter_by(macaddr=self.macaddr))
-        # num_matching_nodes = len(query_records.all())
-        # text_log.write(query_records.all())
-        # for i in query_records:
-        #     text_log.write("Hello world")
 
-        # resp_node_count = 0
-        # for resp_node in query_resp:
-        #     resp_node_count += 1
-        # if resp_node_count == 0:
-        #     text_log.write("New local node")
-        #     # Node doesn't exist in the database, add it
-        #     local_node = Node(longName=self.longName, shortName=self.shortName, macaddr=self.macaddr, hwModel=self.hwModel, local_radio=True)
-        #     self.session.add(local_node)
-        #     self.session.commit()
-        # else:
-        #     text_log.write(f"{self.status_time_prefix} The local node has been seen before")
-        #     local_mac_resp = self.session.query(Node).filter(Node.macaddr == self.macaddr)
-        #     local_node = {"longName": self.longName, "shortName": self.shortName, "macaddr": self.macaddr, "hwModel": self.hwModel, "local_radio": True}
-        #     text_log.write(local_node)
-        #     self.session.execute(update(Node).where(Node.macaddr == self.macaddr).values({Node.local_radio: True}))
-        #     self.session.commit()
 
     def on_mount(self) -> None:
         self.switch_mode("meshchat")
@@ -316,8 +294,12 @@ class meshChatApp(App):
             """Called when QuitScreen is dismissed."""
             if quit:
                 # Disable the local node on exit
-                self.session.execute(update(Node).where(Node.macaddr == self.macaddr).values({Node.local_radio: False}))
-                self.session.commit()
+                # This set of statements is specific to SQLite
+                # https://docs.sqlalchemy.org/en/20/orm/queryguide/dml.html#orm-upsert-statements
+                result = self.session.where(Node.c.local_radio == True).values(local_radio=False)
+                # self.session.execute(stmt)
+                # self.session.execute(update(Node).where(Node.macaddr == self.macaddr).values({Node.local_radio: False}))
+                # self.session.commit()
                 self.exit()
 
         self.push_screen(QuitScreen(), check_quit)
@@ -327,12 +309,33 @@ class meshChatApp(App):
         """
         Called when a new radio connection is made
         """
-        try:
-            text_log = self.query_one(RichLog)
-            text_log.write(f"New local connection")
-        except NoMatches as e:
-            pass
-        # text_log.write(inspect(interface))
+        text_log = self.query_one(RichLog)
+        text_log.write(f"New local connection")
+        # text_log.write(self.getMyUser)
+        # Check if the node has been seen before
+        resp = self.session.execute(select(Node).filter_by(macaddr=self.getMyUser.get("macaddr")))
+        text_log.write(resp.fetchall())
+
+        if len(resp.fetchall()) != 0:
+            text_log.write("Updated")
+            result = self.session.update(Node).where(Node.c.macaddr == self.getMyUser.get("macaddr").values(macaddr=self.getMyUser.get("macaddr")))
+            text_log.write(result)
+            stmt = sqlite_upsert(Node).values({Node.local_radio: True})
+            # resp.fetchall()[0].macaddr = self.getMyUser.get("macaddr")
+        else:
+            text_log.write("Created")
+            new_node = Node(longName=self.getMyUser.get("longName"),
+                            shortName=self.getMyUser.get("shortName"),
+                            macaddr=self.getMyUser.get("macaddr"),
+                            hwModel=self.getMyUser.get("hwModel"),
+                            local_radio=True)
+            self.session.add(new_node)
+
+        self.session.commit()
+        # Update the node list sidebar
+        # text_log.write(node)
+        self.node_listview_table_update()
+
 
     def recv_text(self, packet, interface):
         try:
@@ -355,9 +358,12 @@ class meshChatApp(App):
         Quit and print to console
         """
         text_log = self.query_one(RichLog)
-        text_log.write(f"{self.status_time_prefix} Radio Disconnect")
 
-        def check_radio_connect(return_data: dict):
+
+        async def check_radio_connect(return_data: bool):
+            text_log = self.query_one(RichLog)
+
+            text_log.write(f"Check Radio Connect")
             if return_data["quit"] == True:
                 # Disable the local node on exit
                 node_to_update = self.session.query(Node).filter_by(local_radio=True)
@@ -369,19 +375,26 @@ class meshChatApp(App):
                 self.node_listview_table_update()
                 self.exit()
 
-    def update_nodes(self, node, interface):
-        try:
-            text_log = self.query_one(RichLog)
-            # Check if the node has been seen before
-            query_records = self.session.query(Node).filter_by(macaddr=node.get("user").get("macaddr"))
+        text_log.write(f"{self.status_time_prefix} Radio Disconnect")
+        self.push_screen(RadioDisconnectScreen(), check_radio_connect)
 
-            all_nodes = self.session.query(Node).all()
-            text_log.write(str(all_nodes.count()))
-            for node in all_nodes:
-                text_log.write(f"{node.macaddr} node")
-            text_log.write("-------")
+        self.exit()
+
+    def convert_short_datetime(self, datetime_obj: datetime.datetime):
+        """
+        Take in a date time object and convert it to "Minutes ago", "Hours ago", etc
+        """
+        import arrow
+        now_fmt = datetime_obj.strftime('%Y-%m-%d %H:%M:%S')
+
+        a_time = arrow.get(now_fmt)
+        return a_time
 
 
+    def node_listview_table_update(self):
+        text_log = self.query_one(RichLog)
+        node_option_list = self.query_one("#nodes", OptionList)
+        node_option_list.clear_options()
 
 
         # Create the table for the sidebar
@@ -415,46 +428,22 @@ class meshChatApp(App):
 
     def update_nodes(self, node, interface):
         text_log = self.query_one(RichLog)
+        text_log.write(f"update nodes {node}")
 
         # Check if the node has been seen before
         node_to_update = self.session.query(Node).filter_by(macaddr=node.get("user").get("macaddr"))
 
-
         if node_to_update:
-            node_to_update.macaddr = node.get("user").get("macaddr")
+            update_stmt = update(Node).where(Node.macaddr == node.get("user").get("macaddr"))
+            self.session.execute(update_stmt)
+            # node_to_update.macaddr = node.get("user").get("macaddr")
+        else:
+            new_node = Node(longName=node.get("user").get("longName"),
+                                shortName=node.get("user").get("shortName"),
+                                macaddr=node.get("user").get("macaddr"),
+                                hwModel=node.get("user").get("hwModel"))
+            self.session.add(new_node)
 
-            # query = Node.select(macaddr=node.get("user").get("macaddr"))
-            # text_log.write(query)
-
-
-        # query_records = self.session.execute(select(Node).filter_by(macaddr=node.get("user").get("macaddr")))
-        # num_matching_nodes = len(query_records.all())
-        #
-        # if num_matching_nodes == 0:
-        #     # No matching Nodes, add a new node to the DB
-        #     new_node = Node(longName=node.get("user").get("longName"),
-        #                     shortName=node.get("user").get("shortName"),
-        #                     macaddr=node.get("user").get("macaddr"),
-        #                     hwModel=node.get("user").get("hwModel"))
-        #     self.session.add(new_node)
-        #     self.session.commit()
-        # else:
-        #     # Number of returned nodes != 0. That means we have a match
-        #     update_node = self.session.execute(update(Node).
-        #                                        filter_by(macaddr=node.get("user").get("macaddr")).
-        #                                        values({Node.last_seen: datetime.datetime.now()}))
-        #
-        #     new_node = Node(longName=node.get("user").get("longName"),
-        #                     shortName=node.get("user").get("shortName"),
-        #                     macaddr=node.get("user").get("macaddr"),
-        #                     hwModel=node.get("user").get("hwModel"),
-        #                     last_seen=node.get("lastHeard"))
-        # else:
-        #     new_node = Node(longName=node.get("user").get("longName"),
-        #                     shortName=node.get("user").get("shortName"),
-        #                     macaddr=node.get("user").get("macaddr"),
-        #                     hwModel=node.get("user").get("hwModel"))
-        # self.session.add(new_node)
         self.session.commit()
         # Update the node list sidebar
         # text_log.write(node)
@@ -485,12 +474,13 @@ class Node(Base):
 @click.option("--database", "-d", help="Path to the database file", default="./meshLibTest.db",
               type=click.Path(exists=False, file_okay=True, dir_okay=False, readable=True, writable=True, resolve_path=True),
               show_default=True)
+@click.option("--reset_node_db", help="Reset node database", is_flag=True, default=False, show_default=True)
 @click.pass_context
-def main(ctx, radio, database):
+def main(ctx, radio, database, reset_node_db):
     # console = Console()
 
     # Define the app
-    app = meshChatApp(radio_path=radio,database_path=database)
+    app = meshChatApp(radio_path=radio,database_path=database, reset_node_db=reset_node_db)
     app.run()
 
 if __name__ == "__main__":

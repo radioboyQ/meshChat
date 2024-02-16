@@ -1,0 +1,98 @@
+QuitScreen {
+    align: center middle;
+}
+
+#dialog {
+    grid-size: 2;
+    grid-gutter: 1 2;
+    grid-rows: 1fr 3;
+    padding: 0 1;
+    width: 60;
+    height: 11;
+    border: thick $background 80%;
+    background: $surface;
+}
+
+#question {
+    column-span: 2;
+    height: 1fr;
+    width: 1fr;
+    content-align: center middle;
+}
+
+Button {
+    width: 100%;
+}
+
+RadioSettingsScreen {
+    layout: grid;
+    grid-size: 8 8;
+}
+
+MainChatScreen {
+    layout: grid;
+    grid-size: 8 ;
+}
+
+#main_chat {
+    /*column-span: 3;*/
+    background: purple;
+    height: 1fr;
+}
+
+#main_chat_text_input {
+    background: lightskyblue;
+    height: 14%;
+}
+
+#channels {
+    height: 50%;
+}
+
+/*ListItem {*/
+/*    height: auto;*/
+/*}*/
+
+#nodes {
+    width: 100%;
+    height: 50%;
+}
+
+#radio_info {
+    height: 1fr;
+}
+
+#add_node {
+    height: 5%;
+}
+
+#center_col {
+    column-span: 4;
+    height: 100%;
+}
+
+#left_col {
+    column-span: 2;
+    height: 1fr;
+}
+
+#right_col {
+    column-span: 2;
+    height: 1fr;
+}
+
+#channels {
+    column-span: 1;
+    row-span: 2;
+    background: blue;
+}
+
+.nodes {
+    height: 100%;
+    border: black;
+}
+
+.box {
+    height: 100%;
+    border: solid green;
+}

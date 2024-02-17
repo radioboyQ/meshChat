@@ -119,11 +119,22 @@ class meshChatApp(App):
         # Start Meshtatic interface when the UI is ready
         self.interface = meshtastic.serial_interface.SerialInterface(devPath=str(self.radio_path))
 
-    def on_option_list_option_selected(self, **kwargs):
+    def on_option_list_option_selected(self):
+        """
+        Selected when the user clicks on or hits enter on the keyboard.
+        Just highlighting isn't enough
+        """
         text_log = self.query_one(RichLog)
-        text_log.write(f"on option list option selected")
-        for i in kwargs:
-            text_log.write(i)
+        option_list = self.query_one(OptionList)
+        if option_list.highlighted <= len(self.node_option_list):
+            node_option_mac = self.node_option_list[option_list.highlighted]
+        resp = self.session.query(Node).filter_by(macaddr=node_option_mac)
+        for node in resp.all():
+            # Get the data for each node here
+            # Load the chat
+            pass
+
+
 
     def on_local_connection(self, interface):
         text_log = self.query_one(RichLog)
@@ -163,7 +174,12 @@ class meshChatApp(App):
         self.node_listview_table_update()
 
     def recv_text(self, packet, interface):
+        """
+        Example Packet
+        """
+
         text_log = self.query_one(RichLog)
+        text_log.write(packet)
         decoded_text = packet.get("decoded").get('text')
         # Date time msg received
         now = datetime.datetime.now()
@@ -217,6 +233,11 @@ class meshChatApp(App):
         self.node_listview_table_update()
 
     def node_listview_table_update(self):
+        # Dictionary to store which option has which node
+        # Recreate the list on each call of this function, so it's always up-to-date
+        # Use the MAC addr to identify each node
+        self.node_option_list = list()
+
         text_log = self.query_one(RichLog)
         node_option_list = self.query_one("#nodes", OptionList)
         node_option_list.clear_options()
@@ -228,7 +249,7 @@ class meshChatApp(App):
         # text_log.write(query_records)
 
         # Need to iterate down twice for each node, not sure why yet.
-        for row in result:
+        for counter, row in enumerate(result):
             for node in row:
                 node_listview_table = Table()
                 node_listview_table.add_column("LongName")
@@ -246,6 +267,7 @@ class meshChatApp(App):
                     node_listview_table.add_row(node.longName, node.shortName,
                                                 self.convert_short_datetime(node_last_heard).humanize())
                 node_option_list.add_option(node_listview_table)
+                self.node_option_list.append(node.macaddr)
 
     def disable_local_radio(self):
         # Disable the local node on exit
@@ -338,12 +360,12 @@ def main(ctx, radio, database, reset_node_db, db_in_memory):
             app = meshChatApp(radio_path=radio, database_path=database, reset_node_db=reset_node_db, db_in_memory=db_in_memory)
             exit_code = app.run()
             console.print(f"Exit Code: {exit_code}")
-            if exit_code != 0 or exit_code == None:
-                if exit_code == 1:
-                    exit_msg = f"radio disconnected"
-                    console.log(f"{error_fmt} Something went wrong: {exit_msg}")
-            else:
-                sys.exit(0)
+            # if exit_code != 0 or exit_code == None:
+            #     if exit_code == 1:
+            #         exit_msg = f"radio disconnected"
+            #         console.log(f"{error_fmt} Something went wrong: {exit_msg}")
+            # else:
+            sys.exit(0)
 
         else:
             start_bool = radio_check(radio_path=radio_path, console=console)

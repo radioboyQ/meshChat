@@ -1,9 +1,0 @@
-Screen {
-    layout: horizontal;
-}
-
-.box {
-    height: 1fr;
-    width: 1fr;
-    border: solid green;
-}

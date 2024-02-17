@@ -23,6 +23,146 @@ class Utils(object):
         msg_string = f"{now_fmt.ljust(20, ' ')} [white bold]|[/]"
         return msg_string
 
+class NodeInflation(object):
+    def __init__(self, node):
+        self.node = node
+
+    @property
+    def radio_num(self):
+        if self.node.get("num"):
+            return self.node.get("num")
+        else:
+            return None
+    @property
+    def user_id(self):
+        if self.node.get("user") and self.node.get("user").get("id"):
+            return self.node.get("user").get("id")
+        else:
+            return None
+    @property
+    def longName(self):
+        if self.node.get("user") and self.node.get("user").get("longName"):
+            return self.node.get("user").get("longName")
+        else:
+            return None
+    @property
+    def shortName(self):
+        if self.node.get("user") and self.node.get("user").get("shortName"):
+            return self.node.get("user").get("shortName")
+        else:
+            return None
+    @property
+    def macaddr(self):
+        if self.node.get("user") and self.node.get("user").get("macaddr"):
+            return self.node.get("user").get("macaddr")
+        else:
+            return None
+    @property
+    def hwModel(self):
+        if self.node.get("user") and self.node.get("user").get("hwModel"):
+            return self.node.get("user").get("hwModel")
+        else:
+            return None
+    @property
+    def role(self):
+        if self.node.get("user") and self.node.get("user").get("role"):
+            return self.node.get("user").get("role")
+        else:
+            return None
+    @property
+    def snr(self):
+        if self.node.get("snr"):
+            self.node.get("snr")
+        else:
+            return None
+    @property
+    def lastHeard(self):
+        if self.node.get("lastHeard"):
+            self.node.get("lastHeard")
+        else:
+            return None
+    @property
+    def batteryLevel(self):
+        if self.node.get("deviceMetrics") and self.node.get("deviceMetrics").get("batteryLevel"):
+            self.node.get("deviceMetrics").get("batteryLevel")
+        else:
+            return None
+    @property
+    def voltage(self):
+        if self.node.get("deviceMetrics") and self.node.get("deviceMetrics").get("voltage"):
+            self.node.get("deviceMetrics").get("voltage")
+        else:
+            return None
+
+    @property
+    def channelUtilization(self):
+        if self.node.get("deviceMetrics") and self.node.get("deviceMetrics").get("channelUtilization"):
+            self.node.get("deviceMetrics").get("channelUtilization")
+        else:
+            return None
+    @property
+    def airUtilTx(self):
+        if self.node.get("deviceMetrics") and self.node.get("deviceMetrics").get("airUtilTx"):
+            return self.node.get("deviceMetrics").get("airUtilTx")
+        else:
+            return None
+    @property
+    def latitudeI(self):
+        if self.node.get("position") and self.node.get("position").get("latitudeI"):
+            return self.node.get("position").get("latitudeI")
+        else:
+            return None
+    @property
+    def longitudeI(self):
+        if self.node.get("position") and self.node.get("position").get("longitudeI"):
+            return self.node.get("position").get("longitudeI")
+        else:
+            return None
+
+    @property
+    def altitude(self):
+        if self.node.get("position") and self.node.get("position").get("altitude"):
+            return self.node.get("position").get("altitude")
+        else:
+            return None
+    @property
+    def time(self):
+        if self.node.get("position") and self.node.get("position").get("time"):
+            return self.node.get("position").get("time")
+        else:
+            return None
+    @property
+    def latitude(self):
+        if self.node.get("position") and self.node.get("position").get("latitude"):
+            return self.node.get("position").get("latitude")
+        else:
+            return None
+    @property
+    def longitude(self):
+        if self.node.get("position") and self.node.get("position").get("longitude"):
+            return self.node.get("position").get("longitude")
+        else:
+            return None
+    # radio_num
+    # user_id
+    # longName
+    # shortName
+    # macaddr
+    # hwModel
+    # role
+    # snr
+    # lastHeard
+    # batteryLevel
+    # voltage
+    # channelUtilization
+    # airUtilTx
+    # latitudeI
+    # longitudeI
+    # altitude
+    # time
+    # latitude
+    # longitude
+
 class MeshtasticUtils(object):
 
     def __init__(self, radio_path: Path, db_session: Session, node_table) -> SerialInterface:

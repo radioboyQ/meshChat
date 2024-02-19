@@ -1,8 +1,9 @@
 # 0.5 Checkpoint:
 1. App opens
-	Non-fatal: it connects to the radio. Displays status of Radio (binary state)
-	Displays last chats - Setting in UI to scroll
-	"chat log roll off"- Number of messages or date/time?
+	A. Non-fatal: it connects to the radio.
+	B. Displays status of Radio (binary state)
+	C. Displays current chats -
+		Setting in UI to scroll "chat log roll off"- Number of messages or date/time?
 
 # 1.0 feature list:
 1. Interface to publish and subscribe to the message bus - Receiving storing and shipping

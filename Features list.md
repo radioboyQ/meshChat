@@ -4,6 +4,8 @@
 	B. Displays status of Radio (binary state)
 	C. Displays current chats -
 		Setting in UI to scroll "chat log roll off"- Number of messages or date/time?
+		Chat message displays as: YYYY-MM-DD USERNAME: MESSAGE TEXT
+
 
 # 1.0 feature list:
 1. Interface to publish and subscribe to the message bus - Receiving storing and shipping

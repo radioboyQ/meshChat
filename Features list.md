@@ -13,7 +13,7 @@
 3. Database logging
 Critical path: TUI interface guides development
 4. Settings menu (JSON Config file)
-
+5. Display past chats and previous information
 
 Here is a features list for meshChat in no specific order
 

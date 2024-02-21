@@ -20,10 +20,129 @@ class Utils(object):
         now = datetime.datetime.now()
         now_fmt = now.strftime('%Y-%m-%d %H:%M:%S')
         # Ljust is to make the formatting look better
-        msg_string = f"{now_fmt.ljust(20, ' ')} [white bold]|[/]"
+        msg_string = f"{now_fmt.ljust(20, ' ')}"
         return msg_string
 
-class NodeInflation(object):
+
+class Message(object):
+
+    def __init__(self, raw_msg: dict):
+        """Base class for all messages"""
+        self._raw_msg = raw_msg
+
+    @property
+    def rx_time(self):
+        return self._raw_msg.get("rx_time")
+
+    @property
+    def hopLimit(self):
+        return self._raw_msg.get("hopLimit")
+
+    @property
+    def priority(self):
+        return self._raw_msg.get("priority")
+
+    @property
+    def msg_id(self):
+        return self._raw_msg.get("id")
+
+    @property
+    def portnum(self):
+        return self._raw_msg.get("decoded").get("portnum")
+
+    @property
+    def payload(self):
+        return self._raw_msg.get("decoded").get("payload")
+
+    @property
+    def from_radio_id(self):
+        return self._raw_msg.get("fromId")
+
+    @property
+    def to_radio_id(self):
+        return self._raw_msg.get("toId")
+
+    @property
+    def from_radio_num(self):
+        return self._raw_msg.get("from")
+
+    @property
+    def to_radio_num(self):
+        return self._raw_msg.get("to_radio_num")
+
+
+class AdminMsg(Message):
+
+    def __init__(self, raw_msg: dict):
+        self._raw_msg = raw_msg
+
+
+class TextMsg(Message):
+
+    def __init__(self, raw_msg: dict):
+        self._raw_msg = raw_msg
+
+    @property
+    def rxSnr(self):
+        return self._raw_msg.get("rxSnr")
+
+    @property
+    def rxTime(self):
+        return self._raw_msg.get("rxTime")
+
+    @property
+    def rxRssi(self):
+        return self._raw_msg.get("rxRssi")
+
+    @property
+    def text(self):
+        return self._raw_msg.get("decoded").get("text")
+
+
+class TelemetryMsg(Message):
+    def __init__(self, raw_msg: dict):
+        self._raw_msg = raw_msg
+
+    @property
+    def from_radio_num(self):
+        return self._raw_msg.get("from")
+
+    @property
+    def to_radio_num(self):
+        return self._raw_msg.get("to_radio_num")
+
+    @property
+    def airUtilTx(self):
+        return self._raw_msg.get("decoded").get("telemetry").get("deviceMetrics").get("airUtilTx")
+
+    @property
+    def timestamp(self):
+        return self._raw_msg.get("decoded").get("telemetry").get("time")
+
+
+class Channel(object):
+
+    def __init__(self, txt_msg: TextMsg):
+        self._txt_msg = txt_msg
+
+class DirectMessage(object):
+
+    def __init__(self, txt_msg: TextMsg):
+        self._txt_msg = txt_msg
+
+class Routing(Message):
+
+    def __init__(self, raw_msg: dict):
+        self._raw_msg = raw_msg
+
+    @property
+    def errorReason(self) -> None:
+        if self._raw_msg.get("decoded") and self._raw_msg.get("decoded").get("routing") and self._raw_msg.get("decoded").get("routing").get("errorReason"):
+            return self._raw_msg.get("decoded").get("routing").get("errorReason")
+        else:
+            return None
+
+class NodeParser(object):
     def __init__(self, node):
         self.node = node
 
@@ -34,7 +153,7 @@ class NodeInflation(object):
         else:
             return None
     @property
-    def user_id(self):
+    def radio_id(self):
         if self.node.get("user") and self.node.get("user").get("id"):
             return self.node.get("user").get("id")
         else:

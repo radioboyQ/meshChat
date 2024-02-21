@@ -18,7 +18,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, ProgressColumn, T
 from rich.syntax import Syntax
 from rich.table import Table
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, func, Boolean, update, insert, select, \
-    MetaData, Float
+    MetaData, Float, ForeignKey
 from sqlalchemy.orm import sessionmaker, declarative_base, registry, DeclarativeBase
 from textual import events, work
 from textual.app import App, ComposeResult, RenderResult
@@ -41,7 +41,7 @@ from meshChatLib import (info_blue_splat,
                          success_green,
                          warning_triangle_yellow)
 
-from meshChatLib.utils import MeshtasticUtils, NodeInflation
+from meshChatLib.utils import MeshtasticUtils, NodeParser, Message, TextMsg, TelemetryMsg, AdminMsg
 from meshChatLib.meshScreens import MainChatScreen, QuitScreen, PollingForRadioScreen
 
 
@@ -91,13 +91,28 @@ class meshChatApp(App):
 
         # --- Database ---
         ### Set up Meshtastic radio ###
-        pub.subscribe(self.recv_text, "meshtastic.receive.text")
+        pub.subscribe(self.rx_packet, "meshtastic.receive.text")
         pub.subscribe(self.on_local_connection, "meshtastic.connection.established")
         pub.subscribe(self.update_nodes, "meshtastic.node.updated")
         pub.subscribe(self.disconnect_radio, "meshtastic.connection.lost")
         # The rest of Meshtastic setup happens in on_ready
         # --- Meshtastic ---
         return None
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        text_log = self.query_one(RichLog)
+        # Temporary add button on the main screen
+        if event.button.id == "add_node":
+            # node_listview = self.query_one("#nodes", ListView)
+            # #
+            # node_listview.mount(OptionList(*[self.colony(*row) for row in self.COLONIES]))
+            # self.notify("Button Pushed", title="Guess what!")
+
+            text_log.write("Btn")
+            self.node_listview_table_update()
+        else:
+            text_log.write(f"Unknown Button Pressed. ID: {event.button.id}")
+
 
     def on_mount(self) -> None:
         self.switch_mode("meshchat")
@@ -119,6 +134,13 @@ class meshChatApp(App):
         # Start Meshtatic interface when the UI is ready
         self.interface = meshtastic.serial_interface.SerialInterface(devPath=str(self.radio_path))
 
+        # Update the node list
+        self.node_listview_table_update()
+
+    def on_click(self):
+        text_log = self.query_one(RichLog)
+        text_log.write(f"Click!")
+
     def on_option_list_option_selected(self):
         """
         Selected when the user clicks on or hits enter on the keyboard.
@@ -127,6 +149,7 @@ class meshChatApp(App):
         text_log = self.query_one(RichLog)
         option_list = self.query_one(OptionList)
         if option_list.highlighted <= len(self.node_option_list):
+            text_log.write(option_list.get_option_at_index(option_list.highlighted).id)
             node_option_mac = self.node_option_list[option_list.highlighted]
         resp = self.session.query(Node).filter_by(macaddr=node_option_mac)
         for node in resp.all():
@@ -138,7 +161,7 @@ class meshChatApp(App):
 
     def on_local_connection(self, interface):
         text_log = self.query_one(RichLog)
-        text_log.write(f"New local connection")
+        # text_log.write(f"New local connection")
         self.getMyUser = self.interface.getMyUser()
         self.radio_id = self.getMyUser.get("id")
         self.longName = self.getMyUser.get("longName")
@@ -149,17 +172,17 @@ class meshChatApp(App):
         select_stmt = select(Node).filter_by(macaddr=self.macaddr)
         resp = self.session.execute(select_stmt)
         if len(resp.fetchall()) == 0:
-            text_log.write(self.interface.getMyUser())
+            # text_log.write(self.interface.getMyUser())
             # Wrap this response inside a dictionary beacuse that's how other respones work
-            node_obj = NodeInflation({"user": self.interface.getMyUser()})
-            local_node = Node(radio_num=node_obj.radio_num, user_id=node_obj.user_id, longName=node_obj.longName,
-                            shortName=node_obj.shortName, macaddr=node_obj.macaddr, hwModel=node_obj.hwModel,
-                            role=node_obj.role, snr=node_obj.snr,
-                            lastHeard=node_obj.lastHeard, batteryLevel=node_obj.batteryLevel,
-                            voltage=node_obj.voltage, channelUtilization=node_obj.channelUtilization,
-                            airUtilTx=node_obj.airUtilTx, latitudeI=node_obj.latitudeI,
-                            longitudeI=node_obj.longitudeI, altitude=node_obj.altitude,
-                            time=node_obj.time, latitude=node_obj.latitude, longitude=node_obj.longitude)
+            node_obj = NodeParser({"user": self.interface.getMyUser()})
+            local_node = Node(radio_num=node_obj.radio_num, radio_id=node_obj.radio_id, longName=node_obj.longName,
+                              shortName=node_obj.shortName, macaddr=node_obj.macaddr, hwModel=node_obj.hwModel,
+                              role=node_obj.role, snr=node_obj.snr,
+                              lastHeard=node_obj.lastHeard, batteryLevel=node_obj.batteryLevel,
+                              voltage=node_obj.voltage, channelUtilization=node_obj.channelUtilization,
+                              airUtilTx=node_obj.airUtilTx, latitudeI=node_obj.latitudeI,
+                              longitudeI=node_obj.longitudeI, altitude=node_obj.altitude,
+                              time=node_obj.time, latitude=node_obj.latitude, longitude=node_obj.longitude)
             # Add node to DB
             self.session.add(local_node)
             self.session.commit()
@@ -170,23 +193,75 @@ class meshChatApp(App):
             self.session.execute(u)
             self.session.commit()
 
-        # Update the node list
-        self.node_listview_table_update()
 
-    def recv_text(self, packet, interface):
+
+    def text_rx(self, txt_msg: TextMsg):
         """
-        Example Packet
+        Called for text messages
+        - Parse the message into :TextMsg
+        - Look up the radioId
+        - Put the message into the database
+        - Render the message to screen
+        """
+        text_log = self.query_one(RichLog)
+        node_id = txt_msg.from_radio_id
+        text_log.write(self.interface.getNode(nodeId=node_id))
+
+        resp = self.session.query(Node).filter_by(radio_id=txt_msg.from_radio_id).all()
+
+        for node in resp:
+            text_log.write(f"{meshChatLib.utils.Utils().status_time_prefix}[white bold]|[/][red bold]{node.longName}[/][white bold]>[/] {txt_msg.text}")
+
+            # Add text to database
+            new_msg = ChannelHistory(from_radio_id=txt_msg.from_radio_id, to_channel=txt_msg.to_radio_id, msg_text=txt_msg.text)
+            self.session.execute(new_msg)
+            self.session.commit()
+
+
+
+
+        # text_log.write(f"From: {txt_msg.from_radio_id}")
+        # text_log.write(f"To: {txt_msg.to_radio_id}")
+        # text_log.write(f"Body: {txt_msg.text}")
+
+
+    def rx_packet(self, packet, interface):
+        """
+        Called when any packet is received from Meshtastic
         """
 
         text_log = self.query_one(RichLog)
-        text_log.write(packet)
-        decoded_text = packet.get("decoded").get('text')
+
+        port_num_str = packet.get("decoded").get("portnum")
+
+        if port_num_str == "ADMIN_APP":
+            # This is an admin function
+            pass
+            # console.print(f"Admin")
+            # console.print(f"{packet}")
+
+        elif port_num_str == "POSITION_APP":
+            # GPS data
+            position_app = True
+        elif port_num_str == "TEXT_MESSAGE_APP":
+            # Text message
+            txt = TextMsg(raw_msg=packet)
+            self.text_rx(txt_msg=txt)
+
+
+        elif port_num_str == "TELEMETRY_APP":
+            # console.print(packet)
+            tel = TelemetryMsg(raw_msg=packet)
+            # console.print(tel.from_radio_num)
+
         # Date time msg received
         now = datetime.datetime.now()
         now_fmt = now.strftime('%Y-%m-%d %H:%M:%S')
         # Ljust is to make the formatting look better
-        msg_string = f"{now_fmt.ljust(20, ' ')} [white bold]|[/] {decoded_text}"
-        text_log.write(msg_string)
+        # msg_string = f"{now_fmt.ljust(20, ' ')} [white bold]|[/] {decoded_text}"
+        # text_log.write(msg_string)
+        # Update the view
+        self.node_listview_table_update()
 
     def disconnect_radio(self, interface):
         """
@@ -204,22 +279,12 @@ class meshChatApp(App):
 
     def update_nodes(self, node, interface):
         text_log = self.query_one(RichLog)
-        node_obj = NodeInflation(node)
+        node_obj = NodeParser(node)
 
         resp = self.session.query(Node).filter_by(macaddr=node_obj.macaddr)
 
         if resp.count() == 0:
-            new_node = Node(radio_num=node_obj.radio_num, user_id=node_obj.user_id, longName=node_obj.longName,
-                                            shortName=node_obj.shortName, macaddr=node_obj.macaddr, hwModel=node_obj.hwModel,
-                                            role=node_obj.role, snr=node_obj.snr,
-                                            lastHeard=node_obj.lastHeard, batteryLevel=node_obj.batteryLevel,
-                                            voltage=node_obj.voltage, channelUtilization=node_obj.channelUtilization,
-                                            airUtilTx=node_obj.airUtilTx, latitudeI=node_obj.latitudeI,
-                                            longitudeI=node_obj.longitudeI, altitude=node_obj.altitude,
-                                            time=node_obj.time, latitude=node_obj.latitude, longitude=node_obj.longitude)
-            self.session.add(new_node)
-        else:
-            update_stmt = update(Node).filter_by(macaddr=node_obj.macaddr).values(radio_num=node_obj.radio_num, user_id=node_obj.user_id, longName=node_obj.longName,
+            new_node = Node(radio_num=node_obj.radio_num, radio_id=node_obj.radio_id, longName=node_obj.longName,
                             shortName=node_obj.shortName, macaddr=node_obj.macaddr, hwModel=node_obj.hwModel,
                             role=node_obj.role, snr=node_obj.snr,
                             lastHeard=node_obj.lastHeard, batteryLevel=node_obj.batteryLevel,
@@ -227,10 +292,19 @@ class meshChatApp(App):
                             airUtilTx=node_obj.airUtilTx, latitudeI=node_obj.latitudeI,
                             longitudeI=node_obj.longitudeI, altitude=node_obj.altitude,
                             time=node_obj.time, latitude=node_obj.latitude, longitude=node_obj.longitude)
+            self.session.add(new_node)
+        else:
+            update_stmt = update(Node).filter_by(macaddr=node_obj.macaddr).values(radio_num=node_obj.radio_num, radio_id=node_obj.radio_id, longName=node_obj.longName,
+                                                                                  shortName=node_obj.shortName, macaddr=node_obj.macaddr, hwModel=node_obj.hwModel,
+                                                                                  role=node_obj.role, snr=node_obj.snr,
+                                                                                  lastHeard=node_obj.lastHeard, batteryLevel=node_obj.batteryLevel,
+                                                                                  voltage=node_obj.voltage, channelUtilization=node_obj.channelUtilization,
+                                                                                  airUtilTx=node_obj.airUtilTx, latitudeI=node_obj.latitudeI,
+                                                                                  longitudeI=node_obj.longitudeI, altitude=node_obj.altitude,
+                                                                                  time=node_obj.time, latitude=node_obj.latitude, longitude=node_obj.longitude)
             self.session.execute(update_stmt)
         self.session.commit()
-        # Update the view
-        self.node_listview_table_update()
+
 
     def node_listview_table_update(self):
         # Dictionary to store which option has which node
@@ -238,7 +312,7 @@ class meshChatApp(App):
         # Use the MAC addr to identify each node
         self.node_option_list = list()
 
-        text_log = self.query_one(RichLog)
+        # text_log = self.query_one(RichLog)
         node_option_list = self.query_one("#nodes", OptionList)
         node_option_list.clear_options()
 
@@ -288,7 +362,13 @@ class meshChatApp(App):
         a_time = arrow.get(now_fmt)
         return a_time
 
+    # async def update_weather(self) -> None:
 
+
+
+# Remove all but the essential data?
+# Does the radio cache old data?
+# Test request then disconnect far radio and test again
 class Node(Base):
     __tablename__ = 'nodes'
 
@@ -299,7 +379,7 @@ class Node(Base):
     local_radio = Column(Boolean, default=False)
     # Meshtastic provided information
     radio_num = Column(String(50), unique=False, nullable=True)
-    user_id = Column(String(50), unique=True, nullable=False)
+    radio_id = Column(String(50), unique=True, nullable=False)
     longName = Column(String(50), unique=False, nullable=False)
     shortName = Column(String(10), unique=False, nullable=False)
     macaddr = Column(String(20), unique=True, nullable=False)
@@ -317,6 +397,21 @@ class Node(Base):
     time = Column(String(75), unique=False, nullable=True)
     latitude = Column(Float(), unique=False, nullable=True)
     longitude = Column(Float(), unique=False, nullable=True)
+
+
+class ChannelHistory(Base):
+    __tablename__ = 'channel_history'
+
+    id = Column(Integer, primary_key=True)
+    from_radio_id = Column(ForeignKey("node.radio_id"), nullable=True)
+    to_channel = Column(String(50), nullable=True)
+    msg_text = Column(String(50), nullable=False)
+    time_rx = Column(DateTime(timezone=True), default=func.run())
+    # FROM Radio ID as a foregin key
+    # TO channel/DM
+    # Message text
+    # DateTime RX
+
 
 def radio_check(radio_path: Path, console: Console):
     timeout = 30  # Time to wait in seconds

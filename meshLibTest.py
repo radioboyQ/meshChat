@@ -386,7 +386,6 @@ class Node(Base):
     hwModel = Column(String(100), unique=False, nullable=False)
     role = Column(String(50), unique=False, nullable=True)
     snr = Column(String(50), unique=False, nullable=True)
-    # ToDo: Change to datetime see if
     lastHeard = Column(String(50), unique=False, nullable=True)
     batteryLevel = Column(Integer(), unique=False, nullable=True)
     voltage = Column(Float(), unique=False, nullable=True)

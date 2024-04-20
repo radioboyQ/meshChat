@@ -17,77 +17,85 @@ Critical path: TUI interface guides development
 4. Settings menu (JSON Config file)
 5. Display past chats and previous information
 
-Here is a features list for meshChat in no specific order
+Here is a features list for meshChat in alphabetical order
 
-channel list   
-node list   
-chat list  
-network management  
-admin channel  
-status information  
-battery information  
-radio information  
-send chat messages  
-change node name (local)  
-network management/monitor network traffic  
-trace route to node  
-radio status information display  
-settings window  
-private messages  
-user name deconfliction  
-Radio specific settings  
-impersonation warning  
-radio tracking  
-username changing  
-user safety  
-general chat  
-private messages  
-user safety - trust management at an aggrigation level like eve online  
-reply to messages  
-radio status  
-multiple channel view (for network operations)  
-Remote Radio Status management  
+Allow list
 Battery Status  
-Two feature sets - trusted network and non-trusted network 
-Multimedia  
-file uploads  
-stickers  
-formatting  
-formating with markdown  
-Emojis  
-Emoji Selection (popopen keyboard)  
-status - radio status  
-deep radio status  
-trace route  
-message recieved check marks  
-message read check marks  
-admin channel support -> Radio  
-GPIO Pin control as toggle switchs as plug in  
-Plugin support  
 Blocking users/ nodes  - Does the system still log?  
-spam control  
-message rate limiting  
-themese - color  
-sound  
-fonts  
-node status  
-friends  
-keyword alert  
-notifications - OS, notification of message, push over, highlighting  
-channel display  
-group direct message  
-direct messages  
-join/leave channels ability  
-user join/leave channel notification  
-add/create channels  
-html links  
-logs date/time + message # by channel  
-export logs  
-import logs  
+Emoji Selection (popopen keyboard)  
+Emojis  
+GPIO Pin control as toggle switchs as plug in  
+Multimedia  
+Plugin support  
+Radio specific settings  
+Remote Radio Status management  
+Two feature sets - trusted network and non-trusted network 
 accessibility  
-settings import/sync  
-settings export/sync  
-minor radio settings setups  
-radio settings  
+add/create channels  
+admin channel  
+admin channel support -> Radio  
+battery information  
+change node name (local)  
+channel display  
+channel list
+channel settings
 chat client settings  
+chat list  
 copy/paste  
+deep radio status  
+direct messages  
+export logs  
+far side automations
+file uploads  
+fonts  
+formating with markdown  
+formatting  
+friends  
+general chat  
+group direct message  
+gps logging
+html links  
+impersonation warning  
+import logs  
+join/leave channels ability  
+keyword alert  
+logs date/time + message # by channel  
+message rate limiting  
+message read check marks  
+message recieved check marks  
+minor radio settings setups  
+multiple channel view (for network operations)  
+network management  
+network management/monitor network traffic  
+node list   
+node status  
+notifications - OS, notification of message, push over, highlighting  
+private messages  
+private messages  
+plugins
+radio information  
+radio settings  
+radio status  
+radio status information display  
+radio tracking  
+reply to messages
+remote radio status management
+send chat messages  
+settings export/sync  
+settings import/sync  
+settings window  
+sound  
+spam control  
+status - radio status  
+status information  
+stickers  
+Time/date logging
+Time stamps
+themese - color  
+trace route  
+trace route to node  
+user join/leave channel notification  
+user name deconfliction  
+user safety  
+user safety - trust management at an aggrigation level like eve online  
+username changing  

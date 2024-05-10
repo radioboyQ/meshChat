@@ -9,6 +9,8 @@ from textual.timer import Timer
 from textual.widget import Widget
 from textual.widgets import (Header, Footer, Log, Placeholder, Static, Label, Button, LoadingIndicator, TextArea,
                              Markdown, RichLog, Input, ListView, ListItem, OptionList, ProgressBar)
+
+
 class MainChatScreen(Screen):
 
     BINDINGS = [("ctrl+d", "toggle_dark", "Dark Mode"),
@@ -43,6 +45,7 @@ class MainChatScreen(Screen):
             input_box.focus()
         except:
             pass
+
 
 class QuitScreen(ModalScreen[bool]):
     """Screen with a dialog to quit."""

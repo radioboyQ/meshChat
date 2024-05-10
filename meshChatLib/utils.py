@@ -1,18 +1,55 @@
 # Standard library imports
+from collections import namedtuple
 import datetime
+import pickle
 from pathlib import Path
 from pprint import pprint
 import sys
 from time import strftime, localtime, sleep
 
+import arrow
 import meshtastic
 from meshtastic.serial_interface import SerialInterface
 from pubsub import pub
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, func, Boolean, update, insert, select
-from sqlalchemy.orm import Session
 
 
-class Utils(object):
+class MeshChatUtils(object):
+
+    def __init__(self, pickle_path: Path):
+        """
+        dms = Direct MessageS
+
+        namedTuple(
+        msg_log_dict = {"dms":
+                            sender_(radio_)id: [
+                                                namedTuple("msg", "send_id receiver_id text_msg")
+                                                ],
+                        "channels":
+                            channel_id: [
+                                        namedTuple("channel", "sender_id text_msg channel", defaults=None
+                                        ]
+                        }
+        """
+
+        # Pickle to load the past messages from a file
+        if pickle_path.exists():
+            with open(pickle_path, 'rb') as f:
+                self.msg_log_dict = pickle.load(f)
+        else:
+            # If pickle doesn't exist
+            self.msg_log_dict = {"dms": {}, "channels": {}}
+
+        # Generate the standard dms namedtuple
+        self.msg_tuple = namedtuple("directMessage", ["sender", "receiver", "text_msg", "rx_dt"])
+
+    def convert_short_datetime(self, datetime_obj: datetime.datetime):
+        """
+        Take in a date time object and convert it to "Minutes ago", "Hours ago", etc
+        """
+        now_fmt = datetime_obj.strftime('%Y-%m-%d %H:%M:%S')
+
+        a_time = arrow.get(now_fmt)
+        return a_time
 
     @property
     def status_time_prefix(self):
@@ -23,6 +60,51 @@ class Utils(object):
         msg_string = f"{now_fmt.ljust(20, ' ')}"
         return msg_string
 
+    def text_msg_for_printing(self, receiver: str, text_msg: str, rx_dt: datetime = datetime.datetime.now(), sender_name: str = None):
+        time_formatted = rx_dt.strftime('%Y-%m-%d %H:%M:%S')
+        # self.msg_log_dict["dms"]["radio_id"].append(self.msg_tuple(sender=radio_id, receiver=self.))
+        # Return the full string
+        return f"{time_formatted}[white bold]|[/][red bold] {sender_name} [/][white bold]>[/] {text_msg}"
+
+    def record_dm_msg(self, sender_id: str, receiver_id: str, msg: str) -> None:
+        now = datetime.datetime.now()
+        if "dms" not in self.msg_log_dict:
+            self.msg_log_dict.update({"dms": {sender_id: [self.msg_tuple(sender=sender_id, receiver=receiver_id, text_msg=msg,
+                                                       rx_dt=now)]}})
+        elif sender_id not in self.msg_log_dict["dms"]:
+            # Create the dm if this is the first msg
+            dms_dict_by_radio_id = self.msg_log_dict["dms"]
+            dms_dict_by_radio_id.update({sender_id: [self.msg_tuple(sender=sender_id, receiver=receiver_id,
+                                                                    text_msg=msg, rx_dt=now)]})
+            self.msg_log_dict["dms"] = dms_dict_by_radio_id
+        else:
+            msg_list = self.msg_log_dict["dms"][sender_id]
+            msg_list.append(self.msg_tuple(sender=sender_id, receiver=receiver_id, text_msg=msg, rx_dt=now))
+
+
+    def record_channel_msg(self, channel_id: str, sender_id: str, receiver_id: str, msg: str):
+        now = datetime.datetime.now()
+        if channel_id not in self.msg_log_dict:
+            # Create channel if this is a new channel
+            channel_dict = self.msg_log_dict["channels"]
+            channel_dict.update({sender_id: [self.msg_tuple(sender=sender_id, receiver=receiver_id, text_msg=msg,
+                                                            rx_dt=now)]})
+            self.msg_log_dict["channels"] = channel_dict
+        else:
+            msg_list = self.msg_log_dict["channels"][channel_id]
+            msg_list.append(self.msg_tuple(sender=sender_id, receiver=receiver_id, text_msg=msg, rx_dt=now))
+            self.msg_log_dict["channels"][channel_id] = msg_list
+
+    def get_dms(self, radio_id) -> list:
+        """
+        Return the chat log of the specified radio
+        """
+        if "dms" in self.msg_log_dict and radio_id in self.msg_log_dict["dms"]:
+
+            return self.msg_log_dict["dms"][radio_id]
+        elif radio_id not in self.msg_log_dict["dms"]:
+            return "No messages, yet."
+        # return self.msg_log_dict["dms"][radio_id]
 
 class Message(object):
 
@@ -126,10 +208,12 @@ class Channel(object):
     def __init__(self, txt_msg: TextMsg):
         self._txt_msg = txt_msg
 
+
 class DirectMessage(object):
 
     def __init__(self, txt_msg: TextMsg):
         self._txt_msg = txt_msg
+
 
 class Routing(Message):
 
@@ -142,6 +226,7 @@ class Routing(Message):
             return self._raw_msg.get("decoded").get("routing").get("errorReason")
         else:
             return None
+
 
 class NodeParser(object):
     def __init__(self, node):
@@ -282,83 +367,3 @@ class NodeParser(object):
     # time
     # latitude
     # longitude
-
-class MeshtasticUtils(object):
-
-    def __init__(self, radio_path: Path, db_session: Session, node_table) -> SerialInterface:
-        self.radio_path = radio_path
-        self.Node = node_table
-        self.session = db_session
-
-        if not radio_path.exists():
-            self.radio_disconnect_polling()
-        self.interface = self.startup
-
-    @property
-    def startup(self):
-        # Start setting up Meshtastic because Textual is ready
-        # pub.subscribe(self.recv_text, "meshtastic.receive.text")
-        # pub.subscribe(self.on_local_connection, "meshtastic.connection.established")
-        # pub.subscribe(self.update_nodes, "meshtastic.node.updated")
-        # pub.subscribe(self.disconnect_radio, "meshtastic.connection.lost")
-        interface = meshtastic.serial_interface.SerialInterface(devPath=str(self.radio_path))
-        return interface
-
-    def on_local_connection(self, interface):
-        """
-            Called when a new radio connection is made
-            """
-        # Local radio information
-        self.getMyUser = self.interface.getMyUser()
-        self.radio_id = self.getMyUser.get("id")
-        self.longName = self.getMyUser.get("longName")
-        self.shortName = self.getMyUser.get("shortName")
-        self.hwModel = self.getMyUser.get("hwModel")
-        self.macaddr = self.getMyUser.get("macaddr")
-
-        # Check if the node has been seen before
-        resp = self.session.execute(select(self.Node).filter_by(macaddr=self.getMyUser.get("macaddr")))
-
-        if len(resp.fetchall()) != 0:
-            return resp.fetchall()
-        else:
-            return resp.fetchall()
-
-    # def recv_text(self, packet, interface):
-    #     # print(f"{success_green} Incoming Message: {packet}")
-    #     # print(f"{success_green} self.interface Information: {self.interface}")
-    #     decoded_text = packet.get("decoded").get('text')
-    #     # Date time msg received
-    #     now = datetime.datetime.now()
-    #     now_fmt = now.strftime('%Y-%m-%d %H:%M:%S')
-    #     # Ljust is to make the formatting look better
-    #     msg_string = f"{now_fmt.ljust(20, ' ')} [white bold]|[/] {decoded_text}"
-    #     return msg_string
-    #
-    # def disconnect_radio(self, interface):
-    #     """
-    #     Called when a radio disconnect event is received.
-    #     Quit and print to console
-    #     """
-    #     # Remove local radio from SQL
-    #
-    #     if not self.radio_path.exists():
-    #         self.radio_disconnect_polling()
-    #     self.interface = self.startup
-    #
-    # def update_nodes(self, node, interface):
-    #     return(f"Update Nodes {node}")
-    #
-    # def radio_disconnect_polling(self):
-    #     start_time = datetime.datetime.now()
-    #     while True:
-    #         sleep(1)
-    #         # console.print(f"{datetime.datetime.now() - start_time}")
-    #         time_delta = datetime.datetime.now() - start_time
-    #         if time_delta.seconds < 30:
-    #             # If the radio path exists, try to connect to the radio
-    #             if self.radio_path.exists():
-    #                 # Do first startup sequence here
-    #                 return self.radio_path
-    #         else:
-    #             sys.exit(1)

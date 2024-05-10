@@ -2,7 +2,6 @@
 import logging
 from pathlib import Path
 from pprint import pprint
-import sqlite3
 import sys
 from time import strftime, localtime, sleep
 
@@ -30,7 +29,6 @@ from textual.widgets import (Header, Footer, Log, Placeholder, Static, Label, Bu
                              Markdown, RichLog, Input, ListView, ListItem, OptionList, ProgressBar)
 from textual.worker import Worker, get_current_worker
 
-import meshChatLib.utils
 # Import custom status symbols
 from meshChatLib import (info_blue_splat,
                          info_green_splat,
@@ -40,7 +38,7 @@ from meshChatLib import (info_blue_splat,
                          success_green,
                          warning_triangle_yellow)
 
-from meshChatLib.utils import MeshtasticUtils, NodeParser, Message, TextMsg, TelemetryMsg, AdminMsg
+from meshChatLib.utils import MeshChatUtils, NodeParser, Message, TextMsg, TelemetryMsg, AdminMsg
 from meshChatLib.meshScreens import MainChatScreen, QuitScreen, PollingForRadioScreen
 
 class meshChatApp(App):
@@ -58,56 +56,72 @@ class meshChatApp(App):
         "meshchat": MainChatScreen,
     }
 
-    def __init__(self, radio_path: str, database_path: str, reset_node_db: bool = False,
+    def __init__(self, radio_path: str, pickle_path: Path, reset_node_db: bool = False,
                  db_in_memory: bool = False) -> None:
         super().__init__()
         console = Console()
         logger = logging.getLogger()
         logger.setLevel(logging.ERROR)
         self.radio_path = Path(radio_path)
-        self.db_path = Path(database_path)
+        self.db_path = Path(pickle_path)
         # A list of rx message dates to be used for text_rx to print line Rules reliably
+        # Create a ----- <Jan 1, 1970 ------ type break up for each day messages are received
+        # This will need to be tracked per node & per channel
         self.dates_printed = list()
+        # Selected DM conversation
+        # Default to 0
+        self.selected_dm_index = 0
 
-        ### Set up database###
-        # reset_node_db True: drop all tables and reset the radio's nodeDB to start fresh
-        self.reset_node_db = reset_node_db
+        # Create utils instance
+        self.utils = MeshChatUtils(pickle_path=pickle_path)
 
-        if db_in_memory:
-            self.connection = sqlite3.connect(":memory:")
-            # self.engine = create_engine(":memory:", echo=False, future=True)
-        else:
-            self.connection = sqlite3.connect(f"{self.db_path}")
-            # self.engine = create_engine(f"{self.db_path}", echo=False)
 
         # Dictionary to store which option has which node for the sidebar node optionlist
         # Recreate the list on each call of this function, so it's always up-to-date
         # Use the radio ID to identify each node
         self.node_option_list = list()
 
-        # --- Database ---
         ### Set up Meshtastic radio ###
         pub.subscribe(self.rx_packet, "meshtastic.receive.text")
         pub.subscribe(self.on_local_connection, "meshtastic.connection.established")
         pub.subscribe(self.update_nodes, "meshtastic.node.updated")
-        # pub.subscribe(self.disconnect_radio, "meshtastic.connection.lost")
+        pub.subscribe(self.disconnect_radio, "meshtastic.connection.lost")
         # The rest of Meshtastic setup happens in on_ready
         # --- Meshtastic ---
-        return None
+        # return None
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         text_log = self.query_one(RichLog)
         # Temporary add button on the main screen
         if event.button.id == "add_node":
-            # node_listview = self.query_one("#nodes", ListView)
-            # #
-            # node_listview.mount(OptionList(*[self.colony(*row) for row in self.COLONIES]))
             # self.notify("Button Pushed", title="Guess what!")
 
             text_log.write("Btn")
             self.node_listview_table_update()
+            text_log.write(self.utils.msg_log_dict)
         else:
             text_log.write(f"Unknown Button Pressed. ID: {event.button.id}")
+
+    def load_chat_log(self, chat_index: int) -> None:
+        text_log = self.query_one(RichLog)
+
+        node_id = self.node_option_list[chat_index]
+        # Clear screen
+        text_log.clear()
+        if node_id is None:
+            text_log.write(f"No chat for this node.")
+        else:
+            chat_log_raw = self.utils.get_dms(radio_id=node_id)
+            text_log.write(f"{chat_log_raw}")
+
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected):
+        text_log = self.query_one(RichLog)
+        text_log.clear()
+        self.load_chat_log(chat_index=event.option_index)
+        # Save which node is selected
+        self.selected_dm_index = event.option_index
+
 
     def on_mount(self) -> None:
         self.switch_mode("meshchat")
@@ -118,6 +132,7 @@ class meshChatApp(App):
         def check_quit(quit: bool) -> None:
             """Called when QuitScreen is dismissed."""
             if quit:
+                # self.interface.close()
                 self.exit(result=0)
 
         self.push_screen(QuitScreen(), check_quit)
@@ -127,9 +142,21 @@ class meshChatApp(App):
         if event.input.id == "main_chat_text_input":
             msg_string = event.value.strip()
             text_log = self.query_one(RichLog)
-            text_log.write(self.interface.getLongName())
-            text_log.write(f"{meshChatLib.utils.Utils().status_time_prefix}[white bold]|[/][red bold] "
+
+            text_log.write(f"{self.utils.status_time_prefix}[white bold]|[/][red bold] "
                            f"{self.interface.getLongName()} [/][white bold]>[/] {msg_string}")
+            local_radio_id = self.interface.getMyUser()["id"]
+
+
+
+
+            # Everything is DM for now until channels get sorted out
+            self.utils.record_dm_msg(sender_id=local_radio_id, receiver_id=self.node_option_list[self.selected_dm_index],
+                                     msg=msg_string)
+
+
+
+            # Clear the text box after entry
             input_box = self.query_one(Input)
             input_box.clear()
 
@@ -148,9 +175,19 @@ class meshChatApp(App):
         # Update the sidebar
         self.node_listview_table_update()
 
+        # Set the current chat channel to the local radio, position 0
+        self.node_selected_index = 0
+
+    def disconnect_radio(self, interface):
+        """
+        Called when a radio disconnect event is received.
+        Quit and print to console
+        """
+        self.exit(result=1)
+
     def update_nodes(self, node, interface):
         text_log = self.query_one(RichLog)
-        text_log.write(f"Update Nodes")
+        # text_log.write(f"Update Nodes")
         # interface isn't created until on_ready is called
         if hasattr(self, 'interface'):
             self.node_listview_table_update()
@@ -183,11 +220,16 @@ class meshChatApp(App):
                     else:
                         # text_log.write(node_db.get(node_id))
                         if "lastHeard" in node_db.get(node_id):
+                            text_log.write(node_db.get(node_id))
                             # Convert from epoch time to datetime
-                            lastHeard_dt = datetime.datetime.fromtimestamp(node_db.get(node_id).get("lastHeard"))
+                            if "lastHeard" not in node_db[node_id]:
+                                lastHeard_dt = "Recently"
+                            else:
+                                lastHeard_dt = datetime.datetime.fromtimestamp(node_db.get(node_id).get("lastHeard"))
+                                lastHeard_dt = self.utils.convert_short_datetime(lastHeard_dt).humanize()
                             node_listview_table.add_row(user_dict.get("longName"),
                                                         user_dict.get("shortName"),
-                                                        self.convert_short_datetime(lastHeard_dt).humanize())
+                                                        lastHeard_dt)
                         else:
                             node_listview_table.add_row(user_dict.get("longName"),
                                                         user_dict.get("shortName"), "Unknown")
@@ -204,12 +246,19 @@ class meshChatApp(App):
         """
         text_log = self.query_one(RichLog)
 
-        from_node_id = txt_msg.from_radio_id
-
         node_db = self.interface.nodes
-        user_dict = node_db.get(from_node_id).get("user")
-        text_log.write(
-            f"{meshChatLib.utils.Utils().status_time_prefix}[white bold]|[/][red bold] {user_dict.get('longName')} [/][white bold]>[/] {txt_msg.text}")
+        sender_longName = self.interface.nodesByNum[txt_msg.from_radio_num]["user"]["longName"]
+        # Check if the selected node is the same node that sent the text
+        selected_radio_id = self.node_option_list[self.selected_dm_index]
+        if txt_msg.from_radio_id == selected_radio_id:
+            # The selected radio and the sender are the same, print the message
+            text_log.write(self.utils.text_msg_for_printing(receiver=sender_longName, text_msg=txt_msg.text,
+                                                            rx_dt=txt_msg.rx_time))
+        else:
+            # Do something else if the radio isn't selected. Maybe pop a notification?
+            self.notify(message=f"New message from {sender_longName}")
+        # Everything is DM for now until channels get sorted out
+        self.utils.record_dm_msg(sender_id=txt_msg.from_radio_id, receiver_id=txt_msg.to_radio_id, msg=txt_msg.text)
         if hasattr(self, 'interface'):
             self.node_listview_table_update()
 
@@ -217,11 +266,8 @@ class meshChatApp(App):
         """
         Called when any packet is received from Meshtastic
         """
-
         text_log = self.query_one(RichLog)
-
         port_num_str = packet.get("decoded").get("portnum")
-
         if port_num_str == "ADMIN_APP":
             # This is an admin function
             pass
@@ -235,6 +281,7 @@ class meshChatApp(App):
             # Text message
             txt = TextMsg(raw_msg=packet)
             self.text_rx(txt_msg=txt)
+
 
 
         elif port_num_str == "TELEMETRY_APP":
@@ -251,15 +298,6 @@ class meshChatApp(App):
         # Update the view
         self.node_listview_table_update()
 
-
-    def convert_short_datetime(self, datetime_obj: datetime.datetime):
-        """
-        Take in a date time object and convert it to "Minutes ago", "Hours ago", etc
-        """
-        now_fmt = datetime_obj.strftime('%Y-%m-%d %H:%M:%S')
-
-        a_time = arrow.get(now_fmt)
-        return a_time
 
 def radio_check(radio_path: Path, console: Console):
     timeout = 30  # Time to wait in seconds
@@ -286,10 +324,10 @@ def radio_check(radio_path: Path, console: Console):
 @click.command("meshChat")
 @click.option("-r", "--radio", help="Local path to the radio", default="/dev/ttyACM0", show_default=True,
               type=click.Path(exists=False, readable=True, writable=True, resolve_path=True, allow_dash=True))
-@click.option("--database", "-d", help="Path to the database file", default="./meshLibTest.db",
+@click.option("--database", "-d", help="Path to the database(pickle) file. Database stores messages in chats",
+              default="./meshLibTest.pickle",
               type=click.Path(exists=False, file_okay=True, dir_okay=False, readable=True, writable=True,
-                              resolve_path=True),
-              show_default=True)
+                              resolve_path=True), show_default=True)
 @click.option("-m", "--db-in-memory", is_flag=True, default=False, show_default=True,
               help="Store the database in memory. Supersedes --database option.")
 @click.option("--reset_node_db", help="Reset node database", is_flag=True, default=False, show_default=True)
@@ -300,12 +338,15 @@ def main(ctx, radio, database, reset_node_db, db_in_memory):
     # Check if the radio exists, if not poll for it
     while True:
         if radio_path.exists():
-            app = meshChatApp(radio_path=radio, database_path=database, reset_node_db=reset_node_db,
+            app = meshChatApp(radio_path=radio, pickle_path=Path(database), reset_node_db=reset_node_db,
                               db_in_memory=db_in_memory)
             exit_code = app.run()
             console.print(f"Exit Code: {exit_code}")
             console.print(f"{exit_code}")
-            sys.exit(0)
+            if exit_code != 0 or exit_code == None:
+                start_bool = radio_check(radio_path=radio_path, console=console)
+            else:
+                sys.exit(0)
             # if exit_code != 0 or exit_code == None:
             #     if exit_code == 1:
             #         exit_msg = f"radio disconnected"
@@ -314,7 +355,6 @@ def main(ctx, radio, database, reset_node_db, db_in_memory):
 
         else:
             start_bool = radio_check(radio_path=radio_path, console=console)
-
 
 if __name__ == "__main__":
     main()

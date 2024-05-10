@@ -41,6 +41,9 @@ from meshChatLib import (info_blue_splat,
 from meshChatLib.utils import MeshChatUtils, NodeParser, Message, TextMsg, TelemetryMsg, AdminMsg
 from meshChatLib.meshScreens import MainChatScreen, QuitScreen, PollingForRadioScreen
 
+# import pydevd_pycharm
+# pydevd_pycharm.settrace('localhost', port=8080, stdoutToServer=True, stderrToServer=True, suspend=False)
+
 class meshChatApp(App):
     """Starting meshChat client"""
     TITLE = "meshChat"
